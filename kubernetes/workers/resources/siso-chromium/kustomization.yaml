@@ -1,0 +1,55 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+nameSuffix: -siso-chromium
+
+components:
+  - ../../../components/alerts
+  - ../../../components/kustomization
+
+replacements:
+  - source:
+      kind: Kustomization
+      name: nativelink
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: Alert
+          name: nativelink-alert
+        fieldPaths:
+          - spec.eventMetadata.configMapName
+      - select:
+          kind: Kustomization
+          name: nativelink
+        fieldPaths:
+          - spec.postBuild.substituteFrom.0.name
+
+patches:
+- patch: |-
+    - op: replace
+      path: /spec/eventMetadata/flakeOutput
+      value: github:TraceMachina/nativelink#nativelink-worker-siso-chromium
+  target:
+    kind: Alert
+    name: nativelink-alert
+- patch: |-
+    - op: replace
+      path: /spec/path
+      value: ./kubernetes/workers/siso-chromium
+    - op: add
+      path: /spec/postBuild/substituteFrom/1
+      value:
+        kind: ConfigMap
+        name: nativelink-worker-init
+    - op: add
+      path: /spec/images
+      value:
+      - name: nativelink-worker-init
+        newName: localhost:5001/nativelink-worker-init
+        newTag: ${NATIVELINK_WORKER_INIT_TAG}
+      - name: nativelink-worker-siso-chromium
+        newName: localhost:5001/nativelink-worker-siso-chromium
+        newTag: ${NATIVELINK_WORKER_SISO_CHROMIUM_TAG}
+  target:
+    kind: Kustomization
+    name: nativelink
