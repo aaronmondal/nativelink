@@ -19,14 +19,14 @@ python.toolchain(
 )
 use_repo(python, python = "python_versions")
 
-bazel_dep(name = "rules_rust", version = "0.56.0")
+bazel_dep(name = "rules_rust", version = "0.57.1")
 archive_override(
     module_name = "rules_rust",
-    integrity = "sha256-8TBqrAsli3kN8BrZq8arsN8LZUFsdLTvJ/Sqsph4CmQ=",
+    integrity = "sha256-4qOr06EWg6BTBbv9M8xJTfebNkE9VMBXsa17RZD071I=",
     patch_strip = 1,
     patches = ["//tools:rules_rust-musl-platforms.diff"],
     urls = [
-        "https://github.com/bazelbuild/rules_rust/releases/download/0.56.0/rules_rust-0.56.0.tar.gz",
+        "https://github.com/bazelbuild/rules_rust/releases/download/0.57.1/rules_rust-0.57.1.tar.gz",
     ],
 )
 
@@ -78,25 +78,31 @@ rust.toolchain(
     edition = "2021",
 
     # These should always follow the versions from LRE.
-    rust_analyzer_version = "nightly/2024-11-23",
-    rustfmt_version = "nightly/2024-11-23",
+    rust_analyzer_version = "nightly/2025-02-21",
+    rustfmt_version = "nightly/2025-02-21",
     sha256s = {
-        "2024-11-23/cargo-nightly-x86_64-apple-darwin.tar.xz": "1b0fca7da21cbbc00faef55999a2f034980abcb7da898ccdcdc12ffa18af0eef",
-        "2024-11-23/cargo-nightly-x86_64-unknown-linux-gnu.tar.xz": "54e155e906ca24449dcb3e8da9ef3896a4d025b28593285b5580bcb69f6bdb73",
-        "2024-11-23/clippy-nightly-x86_64-apple-darwin.tar.xz": "0a39d1139eb51f158861c782a884cc23ce44fe83fcb295534daf0a0f556a9e0c",
-        "2024-11-23/clippy-nightly-x86_64-unknown-linux-gnu.tar.xz": "b401ac1362c89a08107906fd46ce11490040eefa498d5e263e513762776e0852",
-        "2024-11-23/llvm-tools-nightly-x86_64-apple-darwin.tar.xz": "2d07d5a6f5b3f947e5a3ae3261f4551b007d34de5c113681d0784a8f5d9cd0e0",
-        "2024-11-23/llvm-tools-nightly-x86_64-unknown-linux-gnu.tar.xz": "d9b308aa7b7e76fe0fecb1ee593854690709c8b6d0e362a1479b0b0629de9191",
-        "2024-11-23/rust-std-nightly-x86_64-apple-darwin.tar.xz": "7d7f1a9759b28fd39929d2d7bcee99bc01b6c330f29f1acf261d307b1338c466",
-        "2024-11-23/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz": "502a5e7b6716add6bc9928ff841b3778bae55b07cc80dc401c57acb726b65566",
-        "2024-11-23/rustc-nightly-x86_64-apple-darwin.tar.xz": "3339efb0a1c4f8f25baea1a764d8bed4bfda5c17272107ae48081165caaced4c",
-        "2024-11-23/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz": "1ac699e3942648cf3844ff3c8f03acb66ac01b221679a62619c9ed48ad4321a2",
-        "2024-11-23/rustfmt-nightly-x86_64-apple-darwin.tar.xz": "e67b50b801b14c2f06dd10544e66a0e76374b716bfb92f6f4b7055b4d4023ec7",
-        "2024-11-23/rustfmt-nightly-x86_64-unknown-linux-gnu.tar.xz": "ac2a8fff891473220d36c9e62afc2dc0d5aebaefbb8489584bd2446a37d6fd7b",
+        "2025-02-21/cargo-nightly-x86_64-unknown-linux-gnu.tar.xz": "c1ad7faf6dea989c723975a312d7c1185a642820e9415991d110672f7ee2a2d2",
+        "2025-02-21/clippy-nightly-x86_64-unknown-linux-gnu.tar.xz": "5b0268cfef1d4945c458189377d1ccda05c6ffe8ce062f38bf230c0dbe46d39c",
+        "2025-02-21/llvm-tools-nightly-x86_64-unknown-linux-gnu.tar.xz": "a0bec5f3b7d8f91b952f950ca20eb6050b0fd27bcbf44fe5b018cedd7d37ebf9",
+        "2025-02-21/rust-std-nightly-x86_64-unknown-linux-gnu.tar.xz": "8df8da29f079b56df9c12e4f297e191fad9327f9ffc9a1c7e01a09edf02ecc81",
+        "2025-02-21/rustc-nightly-aarch64-apple-darwin.tar.xz": "d8a047ec82fba13acdf5c15df30a8529dd8d5ff9f1843b8f62a52097cf26095e",
+        "2025-02-21/rustc-nightly-x86_64-unknown-linux-gnu.tar.xz": "2859a9926c8ff7ca4096d47f728a3a24664872debed978998563307fb116f559",
+        "2025-02-21/rustfmt-nightly-aarch64-apple-darwin.tar.xz": "587b2de13fb99a48c14c122df991738e3adb14c505ea08353b6f2402dc26f460",
+        "2025-02-21/rustfmt-nightly-x86_64-unknown-linux-gnu.tar.xz": "ee249d295947f256bed5fe701b5b39c2269e526e4de6814b18cc9f27a9bdc30d",
+        "cargo-1.85.0-aarch64-apple-darwin.tar.xz": "d67766fb2e62214b3ee3faf01dcddddcb48e8d0483c2bb3475a16cb96210afed",
+        "cargo-1.85.0-x86_64-unknown-linux-gnu.tar.xz": "0aff33b57b0e0b102d762a2b53042846c1ca346cff4b7bd96b5c03c9e8e51d81",
+        "clippy-1.85.0-aarch64-apple-darwin.tar.xz": "62038ee7a541e78ebb34172eac2b8e458e00ecdf4f83bfbe204044c70d9a5e9c",
+        "clippy-1.85.0-x86_64-unknown-linux-gnu.tar.xz": "0dc3ca1708a6c9eed05d0802364377572b79ff079815b7bcbe8e3991f77c4117",
+        "llvm-tools-1.85.0-aarch64-apple-darwin.tar.xz": "2652b489590805718981db100a7d4f27611510b3ac46b588a433cb61dcce2402",
+        "llvm-tools-1.85.0-x86_64-unknown-linux-gnu.tar.xz": "01d5f0f8b3aeb1c7bd4c3ebbf0b30a8be02481f8dfb3fcbf950627460d0d4b5e",
+        "rust-std-1.85.0-aarch64-apple-darwin.tar.xz": "7da1367209de00e3fb315c0e76658e3605ee2559892d29851a3159ae7ea1ddc5",
+        "rust-std-1.85.0-x86_64-unknown-linux-gnu.tar.xz": "285e105d25ebdf501341238d4c0594ecdda50ec9078f45095f793a736b1f1ac2",
+        "rustc-1.85.0-aarch64-apple-darwin.tar.xz": "2a03e227b57a49d80b43473b6fa2d56ad661ece0d8ffd81f639cd31600d3823e",
+        "rustc-1.85.0-x86_64-unknown-linux-gnu.tar.xz": "7436f13797475082cd87aa65547449e01659d6a810b4cd5f8aedc48bb9f89dfb",
     },
     versions = [
-        "1.84.0",
-        "nightly/2024-11-23",
+        "1.85.0",
+        "nightly/2025-02-21",
     ],
 )
 use_repo(rust, "rust_toolchains")
