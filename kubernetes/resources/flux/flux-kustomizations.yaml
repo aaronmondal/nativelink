@@ -3,25 +3,25 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: tekton-operator
-  namespace: default
+  namespace: flux-system
 spec:
   interval: 2m
   path: "./kubernetes/vendor/tekton-operator"
   prune: true
   force: true
   retryInterval: 20s
-  targetNamespace: default
+  targetNamespace: tekton-operator
   wait: true
   sourceRef:
     kind: GitRepository
     name: nativelink
-    namespace: default
+    namespace: flux-system
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: tekton-config
-  namespace: default
+  namespace: flux-system
 spec:
   interval: 2m
   path: "./kubernetes/resources/tekton-config"
@@ -32,7 +32,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: nativelink
-    namespace: default
+    namespace: flux-system
   dependsOn:
     - name: tekton-operator
 ---
@@ -40,7 +40,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: nativelink-tekton-resources
-  namespace: default
+  namespace: flux-system
 spec:
   interval: 2m
   path: "./kubernetes/resources/tekton"
@@ -52,7 +52,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: nativelink
-    namespace: default
+    namespace: flux-system
   dependsOn:
     - name: tekton-config
 ---
@@ -60,7 +60,7 @@ apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization
 metadata:
   name: provider
-  namespace: default
+  namespace: flux-system
 spec:
   interval: 2m
   path: "./kubernetes/resources/provider"
@@ -72,6 +72,84 @@ spec:
   sourceRef:
     kind: GitRepository
     name: nativelink
-    namespace: default
+    namespace: flux-system
   dependsOn:
     - name: nativelink-tekton-resources
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cert-manager
+  namespace: flux-system
+spec:
+  interval: 2m
+  path: "./kubernetes/resources/cert-manager"
+  prune: true
+  force: true
+  retryInterval: 20s
+  # Don't set targetNamespace for this one as the cert-manager kustomization
+  # needs to create a cert-manager namespace. The flux resources will live in
+  # the flux-system namespace.
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: nativelink
+    namespace: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: olm
+  namespace: flux-system
+spec:
+  interval: 24h
+  path: "./kubernetes/vendor/olm"
+  prune: true
+  force: true
+  retryInterval: 20s
+  # Don't set targetNamespace for this one as OLM mangages this itself.
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: nativelink
+    namespace: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: operators
+  namespace: flux-system
+spec:
+  interval: 24h
+  path: "./kubernetes/vendor/operators"
+  prune: true
+  force: true
+  retryInterval: 20s
+  targetNamespace: operators
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: nativelink
+    namespace: flux-system
+  dependsOn:
+    - name: olm
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: grafana
+  namespace: flux-system
+spec:
+  interval: 2m
+  path: "./kubernetes/resources/grafana"
+  prune: true
+  force: true
+  retryInterval: 20s
+  targetNamespace: grafana
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: nativelink
+    namespace: flux-system
+  dependsOn:
+    - name: operators

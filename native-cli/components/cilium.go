@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/apiextensions"
+	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/core/v1"
 	helmv3 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/meta/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/yaml"
@@ -23,6 +24,8 @@ type Cilium struct {
 }
 
 // Install installs Cilium on the cluster.
+//
+//nolint:funlen
 func (component *Cilium) Install(
 	ctx *pulumi.Context,
 	name string,
@@ -32,6 +35,11 @@ func (component *Cilium) Install(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errPulumi, err)
+	}
+
+	grafanaNs, err := grafanaNamespace(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create grafana namespace: %w", err)
 	}
 
 	cilium, err := helmv3.NewRelease(ctx, name, &helmv3.ReleaseArgs{
@@ -59,9 +67,43 @@ func (component *Cilium) Install(
 
 			"image": pulumi.Map{"pullPolicy": pulumi.String("IfNotPresent")},
 
+			"prometheus": pulumi.Map{"enabled": pulumi.Bool(true)},
+
+			"dashboards": pulumi.Map{
+				"enabled":   pulumi.Bool(true),
+				"namespace": grafanaNs.Metadata.Name().Elem(),
+			},
+
+			"operator": pulumi.Map{
+				"prometheus": pulumi.Map{"enabled": pulumi.Bool(true)},
+				"dashboards": pulumi.Map{
+					"enabled":   pulumi.Bool(true),
+					"namespace": grafanaNs.Metadata.Name().Elem(),
+				},
+			},
+
 			"hubble": pulumi.Map{
 				"relay": pulumi.Map{"enabled": pulumi.Bool(true)},
 				"ui":    pulumi.Map{"enabled": pulumi.Bool(true)},
+				"metrics": pulumi.Map{
+					"enabled": pulumi.StringArray{
+						pulumi.String("dns"),
+						pulumi.String("drop"),
+						pulumi.String("tcp"),
+						pulumi.String("flow"),
+						pulumi.String("port-distribution"),
+						pulumi.String("icmp"),
+						//nolint:lll
+						pulumi.String(
+							"httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction",
+						),
+					},
+					"enableOpenMetrics": pulumi.Bool(true),
+					"dashboards": pulumi.Map{
+						"enabled":   pulumi.Bool(true),
+						"namespace": grafanaNs.Metadata.Name().Elem(),
+					},
+				},
 			},
 		},
 	}, pulumi.DependsOn([]pulumi.Resource{gatewayAPI}))
@@ -84,6 +126,23 @@ func (component *Cilium) Install(
 		l2Announcements,
 		defaultPool,
 	), nil
+}
+
+// grafanaNamespace creates the "grafana" namespace ahead of time to simplify
+// so that we can create Cilium's dashboards into it without permission issues.
+func grafanaNamespace(
+	ctx *pulumi.Context,
+) (*corev1.Namespace, error) {
+	grafanaNs, err := corev1.NewNamespace(ctx, "grafana", &corev1.NamespaceArgs{
+		Metadata: &metav1.ObjectMetaArgs{
+			Name: pulumi.String("grafana"),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create grafana namespace: %w", err)
+	}
+
+	return grafanaNs, nil
 }
 
 // l2Announcements creates the CiliumL2AnnouncementPolicy for the cluster.

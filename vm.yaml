@@ -1,0 +1,768 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMSingle
+metadata:
+  name: vmsingle
+  namespace: monitoring
+spec:
+  retentionPeriod: 1d
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VLogs
+metadata:
+  name: vlogs
+  namespace: monitoring
+spec:
+  retentionPeriod: 1d
+---
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoMonolithic
+metadata:
+  name: tempo
+  namespace: monitoring
+spec:
+  observability:
+    grafana:
+      dataSource:
+        enabled: false
+  jaegerui:
+    enabled: true
+    ingress:
+      enabled: true
+    resources:
+      limits:
+        cpu: '2'
+        memory: 2Gi
+  resources:
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  storage:
+    traces:
+      backend: memory
+
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: prometheus-datasource
+  namespace: grafana
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  datasource:
+    name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://vmsingle-vmsingle.monitoring.svc.cluster.local:8429
+    uid: "prometheus"
+    isDefault: true
+    jsonData:
+      timeInterval: "15s"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: vm-datasource
+  namespace: grafana
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  datasource:
+    name: VictoriaMetrics
+    type: victoriametrics-metrics-datasource
+    access: proxy
+    url: http://vmsingle-vmsingle.monitoring.svc.cluster.local:8429
+    uid: "victoriametrics"
+    jsonData:
+      timeInterval: "15s"
+  plugins:
+    - name: victoriametrics-metrics-datasource
+      version: "0.14.0"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: loki-datasource
+  namespace: grafana
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasource:
+    name: VictoriaLogs
+    type: loki
+    access: proxy
+    type: victoriametrics-logs-datasource
+    url: http://vlogs-vlogs.monitoring.svc.cluster.local:9428
+  plugins:
+    - name: victoriametrics-logs-datasource
+      version: "0.16.2"
+
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: vl-datasource
+  namespace: grafana
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasource:
+    name: VictoriaLogs
+    access: proxy
+    type: victoriametrics-logs-datasource
+    url: http://vlogs-vlogs.monitoring.svc.cluster.local:9428
+  plugins:
+    - name: victoriametrics-logs-datasource
+      version: "0.16.2"
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDatasource
+metadata:
+  name: tempo-datasource
+  namespace: grafana
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  datasource:
+    name: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo-tempo.monitoring.svc.cluster.local:3200
+    jsonData:
+      httpMethod: GET
+      serviceMap:
+        datasourceUid: prometheus
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: vm-dashboard
+  namespace: grafana
+spec:
+  resyncPeriod: 30s
+  plugins:
+    - name: victoriametrics-metrics-datasource
+      version: "0.14.0"
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+      # url: "https://raw.githubusercontent.com/VictoriaMetrics/VictoriaMetrics/refs/heads/master/dashboards/vm/victoriametrics.json"
+  url: https://raw.githubusercontent.com/VictoriaMetrics/VictoriaMetrics/refs/heads/master/dashboards/victoriametrics.json
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: vl-dashboard
+  namespace: grafana
+spec:
+  resyncPeriod: 30s
+  plugins:
+    - name: victoriametrics-metrics-datasource
+      version: "0.14.0"
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  url: https://raw.githubusercontent.com/VictoriaMetrics/VictoriaMetrics/refs/heads/master/dashboards/victorialogs.json
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: cilium-dashboard
+  namespace: grafana
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  configMapRef:
+    name: cilium-dashboard
+    key: cilium-dashboard.json
+  datasources:
+    - inputName: prometheus-datasource
+      datasourceName: prometheus-datasource
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: cilium-operator-dashboard
+  namespace: grafana
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  configMapRef:
+    name: cilium-operator-dashboard
+    key: cilium-operator-dashboard.json
+  datasources:
+    - inputName: prometheus-datasource
+      datasourceName: prometheus-datasource
+---
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: flux-logs
+  namespace: grafana
+spec:
+  resyncPeriod: 30s
+  plugins:
+    - name: victoriametrics-logs-datasource
+      version: "0.16.2"
+  instanceSelector:
+    matchLabels:
+      dashboards: "grafana"
+  url: https://raw.githubusercontent.com/fluxcd/flux2-monitoring-example/refs/heads/main/monitoring/configs/dashboards/logs.json
+  datasources:
+    - inputName: vl-datasource
+      datasourceName: vl-datasource
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+  namespace: monitoring
+spec:
+  mode: daemonset
+  image: otel/opentelemetry-collector-contrib:0.121.0
+  observability:
+    metrics:
+      enableMetrics: true
+  volumeMounts:
+    - name: varlog
+      mountPath: /var/log
+      readOnly: true
+    - name: varlibdockercontainers
+      mountPath: /var/lib/docker/containers
+      readOnly: true
+  volumes:
+    - name: varlog
+      hostPath:
+        path: /var/log
+    - name: varlibdockercontainers
+      hostPath:
+        path: /var/lib/docker/containers
+  config:
+    receivers:
+      prometheus:
+        config:
+          scrape_configs:
+
+            # Cilium K8s pods
+            # See: https://github.com/cilium/cilium/blob/main/examples/kubernetes/addons/prometheus/files/prometheus/prometheus.yaml
+            - job_name: 'kubernetes-pods'
+              scrape_interval: 5s
+              kubernetes_sd_configs:
+                - role: pod
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  action: keep
+                  regex: true
+                - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                  action: replace
+                  target_label: __metrics_path__
+                  regex: (.+)
+                - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+                  action: replace
+                  regex: '([^:]+)(?::\d+)?;(\d+)'
+                  replacement: $1:$2
+                  target_label: __address__
+                - action: labelmap
+                  regex: __meta_kubernetes_pod_label_(.+)
+                - source_labels: [__meta_kubernetes_namespace]
+                  action: replace
+                  target_label: namespace
+                - source_labels: [__meta_kubernetes_pod_name]
+                  action: replace
+                  target_label: pod
+                - source_labels: [__meta_kubernetes_pod_container_port_number]
+                  action: keep
+                  regex: '\d+'
+
+            # Cilium K8s services
+            # See: https://github.com/cilium/cilium/blob/main/examples/kubernetes/addons/prometheus/files/prometheus/prometheus.yaml
+            - job_name: 'kubernetes-services'
+              kubernetes_sd_configs:
+                - role: service
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+                  action: keep
+                  regex: true
+                - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+                  action: replace
+                  target_label: __scheme__
+                  regex: (https?)
+                - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+                  action: replace
+                  target_label: __metrics_path__
+                  regex: (.+)
+                - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+                  action: replace
+                  target_label: __address__
+                  regex: '([^:]+)(?::\d+)?;(\d+)'
+                  replacement: $1:$2
+                - action: labelmap
+                  regex: __meta_kubernetes_service_label_(.+)
+                - source_labels: [__meta_kubernetes_namespace]
+                  action: replace
+                  target_label: namespace
+                - source_labels: [__meta_kubernetes_service_name]
+                  action: replace
+                  target_label: service
+
+            # VictoriaMetrics VMSingle
+            # As created by a default VMAgent for VMSingle.
+            - job_name: serviceScrape/monitoring/vmsingle-vmsingle/0
+              metrics_path: /metrics
+              relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+                regex: monitoring
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_instance]
+                regex: vmsingle
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+                regex: vmsingle
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_managed_by]
+                regex: vm-operator
+              - action: drop
+                source_labels: [__meta_kubernetes_service_labelpresent_operator_victoriametrics_com_additional_service]
+                regex: "true"
+              - action: keep
+                source_labels: [__meta_kubernetes_endpoint_port_name]
+                regex: http
+              - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
+                separator: ;
+                target_label: node
+                regex: Node;(.*)
+                replacement: $1
+              - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
+                separator: ;
+                target_label: pod
+                regex: Pod;(.*)
+                replacement: $1
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+              - source_labels: [__meta_kubernetes_pod_container_name]
+                target_label: container
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_service_name]
+                target_label: service
+              - source_labels: [__meta_kubernetes_service_name]
+                target_label: job
+                replacement: $1
+              - target_label: endpoint
+                replacement: http
+              kubernetes_sd_configs:
+              - role: endpoints
+                namespaces:
+                  own_namespace: false
+                  names:
+                  - monitoring
+
+            # VictoriaMetrics VMSingle
+            # As created by a default VMAgent for VLogs.
+            - job_name: serviceScrape/monitoring/vlogs-vlogs/0
+              metrics_path: /metrics
+              relabel_configs:
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+                regex: monitoring
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_instance]
+                regex: vlogs
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_name]
+                regex: vlogs
+              - action: keep
+                source_labels: [__meta_kubernetes_service_label_managed_by]
+                regex: vm-operator
+              - action: drop
+                source_labels: [__meta_kubernetes_service_labelpresent_operator_victoriametrics_com_additional_service]
+                regex: "true"
+              - action: keep
+                source_labels: [__meta_kubernetes_endpoint_port_name]
+                regex: http
+              - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
+                separator: ;
+                target_label: node
+                regex: Node;(.*)
+                replacement: $1
+              - source_labels: [__meta_kubernetes_endpoint_address_target_kind, __meta_kubernetes_endpoint_address_target_name]
+                separator: ;
+                target_label: pod
+                regex: Pod;(.*)
+                replacement: $1
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+              - source_labels: [__meta_kubernetes_pod_container_name]
+                target_label: container
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_service_name]
+                target_label: service
+              - source_labels: [__meta_kubernetes_service_name]
+                target_label: job
+                replacement: $1
+              - target_label: endpoint
+                replacement: http
+              kubernetes_sd_configs:
+              - role: endpoints
+                namespaces:
+                  own_namespace: false
+                  names:
+                  - monitoring
+
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+        exclude:
+          # Exclude logs from all containers named otel-collector
+          - /var/log/pods/*/otel-collector/*.log
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+        operators:
+          # Find out which format is used by kubernetes
+          - type: router
+            id: get-format
+            routes:
+              - output: parser-docker
+                expr: 'body matches "^\\{"'
+              - output: parser-crio
+                expr: 'body matches "^[^ Z]+ "'
+              - output: parser-containerd
+                expr: 'body matches "^[^ Z]+Z"'
+
+          # Parse CRI-O format
+          - type: regex_parser
+            id: parser-crio
+            regex: '^(?P<time>[^ Z]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+            output: extract_metadata_from_filepath
+            timestamp:
+              parse_from: attributes.time
+              layout_type: gotime
+              layout: '2006-01-02T15:04:05.999999999Z07:00'
+
+          # Parse CRI-Containerd format
+          - type: regex_parser
+            id: parser-containerd
+            regex: '^(?P<time>[^ ^Z]+Z) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) ?(?P<log>.*)$'
+            output: extract_metadata_from_filepath
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+          # Parse Docker format
+          - type: json_parser
+            id: parser-docker
+            output: extract_metadata_from_filepath
+            timestamp:
+              parse_from: attributes.time
+              layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+          # Extract metadata from file path
+          - type: regex_parser
+            id: extract_metadata_from_filepath
+            regex: '^.*\/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<uid>[a-f0-9\-]{36})\/(?P<container_name>[^\._]+)\/(?P<restart_count>\d+)\.log$'
+            parse_from: attributes["log.file.path"]
+            cache:
+              size: 128  # default maximum amount of Pods per Node is 110
+
+          # Update body field after finishing all parsing
+          - type: move
+            from: attributes.log
+            to: body
+
+          # Rename attributes
+          - type: move
+            from: attributes.stream
+            to: attributes["log.iostream"]
+          - type: move
+            from: attributes.container_name
+            to: resource["k8s.container.name"]
+          - type: move
+            from: attributes.namespace
+            to: resource["k8s.namespace.name"]
+          - type: move
+            from: attributes.pod_name
+            to: resource["k8s.pod.name"]
+          - type: move
+            from: attributes.restart_count
+            to: resource["k8s.container.restart_count"]
+          - type: move
+            from: attributes.uid
+            to: resource["k8s.pod.uid"]
+
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        send_batch_size: 1000
+        timeout: 10s
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      resource:
+        attributes:
+          - key: k8s.cluster.name
+            value: "kind"
+            action: upsert
+
+          # Ridiculously hacky workarounds for
+          # https://github.com/VictoriaMetrics/victorialogs-datasource/issues/265
+          #
+          # Standard kubernetes.labels namespace
+          - key: kubernetes.safe.labels.app_kubernetes_io_name
+            from_attribute: kubernetes.labels.app.kubernetes.io/name
+            action: upsert
+          - key: kubernetes.safe.labels.app_kubernetes_io_instance
+            from_attribute: kubernetes.labels.app.kubernetes.io/instance
+            action: upsert
+          - key: kubernetes.safe.labels.app_kubernetes_io_component
+            from_attribute: kubernetes.labels.app.kubernetes.io/component
+            action: upsert
+
+          # k8s.labels namespace
+          - key: k8s.safe.labels.app_kubernetes_io_name
+            from_attribute: k8s.labels.app.kubernetes.io/name
+            action: upsert
+          - key: k8s.safe.labels.app_kubernetes_io_instance
+            from_attribute: k8s.labels.app.kubernetes.io/instance
+            action: upsert
+          - key: k8s.safe.labels.app_kubernetes_io_component
+            from_attribute: k8s.labels.app.kubernetes.io/component
+            action: upsert
+
+          # k8s.pod.labels namespace
+          - key: k8s.pod.safe.labels.app_kubernetes_io_name
+            from_attribute: k8s.pod.labels.app.kubernetes.io/name
+            action: upsert
+          - key: k8s.pod.safe.labels.app_kubernetes_io_instance
+            from_attribute: k8s.pod.labels.app.kubernetes.io/instance
+            action: upsert
+          - key: k8s.pod.safe.labels.app_kubernetes_io_component
+            from_attribute: k8s.pod.labels.app.kubernetes.io/component
+            action: upsert
+
+          # Also handle bare app.kubernetes.io namespace (rare but possible)
+          - key: app_kubernetes_io_name
+            from_attribute: app.kubernetes.io/name
+            action: upsert
+          - key: app_kubernetes_io_instance
+            from_attribute: app.kubernetes.io/instance
+            action: upsert
+          - key: app_kubernetes_io_component
+            from_attribute: app.kubernetes.io/component
+            action: upsert
+
+      k8sattributes:
+        auth_type: "serviceAccount"
+        passthrough: false
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.namespace.name
+            - k8s.node.name
+            - k8s.pod.start_time
+            - k8s.cluster.uid
+          # Pod labels which can be fetched via K8sattributeprocessor
+          labels:
+            - tag_name: key1
+              key: label1
+              from: pod
+            - tag_name: key2
+              key: label2
+              from: pod
+            - key: app
+            - key: app.kubernetes.io/name
+            - key: app.kubernetes.io/component
+            - key: app.kubernetes.io/instance
+        # Pod association using resource attributes and connection
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.uid
+              - from: resource_attribute
+                name: k8s.pod.name
+          # - sources:
+          #     - from: resource_attribute
+          #       name: k8s.pod.uid
+          #     - from: resource_attribute
+          #       name: k8s.pod.ip
+          #     - from: connection
+
+    exporters:
+      prometheusremotewrite:
+        endpoint: "http://vmsingle-vmsingle.monitoring.svc:8429/prometheus/api/v1/write"
+        tls:
+          insecure: true
+
+      otlphttp:
+        logs_endpoint: "http://vlogs-vlogs.monitoring.svc.cluster.local:9428/insert/opentelemetry/v1/logs"
+        traces_endpoint: "http://tempo-tempo.monitoring.svc.cluster.local:4318/v1/traces"
+        tls:
+          insecure: true
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [prometheus]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite] # debug
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, batch, k8sattributes, resource]
+          exporters: [otlphttp]
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch, k8sattributes, resource]
+          exporters: [otlphttp]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector-prometheus-discovery
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+      - namespaces
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - replicasets
+      - deployments
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector-prometheus-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector-prometheus-discovery
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector-collector  # Auto-generated name from the operator
+    namespace: monitoring
+
+# Native VMAgent setup. Similar to the otel collector.
+#
+# ---
+# apiVersion: operator.victoriametrics.com/v1beta1
+# kind: VMAgent
+# metadata:
+#   name: vmagent
+#   namespace: monitoring
+# spec:
+#   remoteWrite:
+#     - url: "http://vmsingle-vmsingle.monitoring.svc:8429/api/v1/write"
+#   serviceScrapeNamespaceSelector: {}
+#   podScrapeNamespaceSelector: {}
+#   podScrapeSelector: {}
+#   serviceScrapeSelector: {}
+#   nodeScrapeSelector: {}
+#   nodeScrapeNamespaceSelector: {}
+#   staticScrapeSelector: {}
+#   staticScrapeNamespaceSelector: {}
+# ---
+# apiVersion: operator.victoriametrics.com/v1beta1
+# kind: VMServiceScrape
+# metadata:
+#   name: prometheus-annotated-services
+# spec:
+#   selector:
+#     matchExpressions: []  # Select based on annotations via relabelConfigs.
+#   namespaceSelector:
+#     any: true
+#   endpoints:
+#     - relabelConfigs:
+#       - sourceLabels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+#         action: keep
+#         regex: "true"
+#       - sourceLabels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+#         action: replace
+#         targetLabel: __scheme__
+#         regex: "(https?)"
+#       - sourceLabels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+#         action: replace
+#         targetLabel: __metrics_path__
+#         regex: "(.+)"
+#       - sourceLabels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+#         action: replace
+#         targetLabel: __address__
+#         regex: '([^:]+)(?::\d+)?;(\d+)'
+#         replacement: $1:$2
+#       - action: labelmap
+#         regex: "__meta_kubernetes_service_label_(.+)"
+#       - sourceLabels: [__meta_kubernetes_namespace]
+#         action: replace
+#         targetLabel: namespace
+#       - sourceLabels: [__meta_kubernetes_service_name]
+#         action: replace
+#         targetLabel: service
+# ---
+# apiVersion: operator.victoriametrics.com/v1beta1
+# kind: VMPodScrape
+# metadata:
+#   name: prometheus-annotated-pods
+# spec:
+#   selector:
+#     matchExpressions: []  # Select based on annotations via relabelConfigs.
+#   namespaceSelector:
+#     any: true
+#   sampleLimit: 0
+#   podMetricsEndpoints:
+#     - relabelConfigs:
+#       - sourceLabels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+#         action: keep
+#         regex: "true"
+#       - sourceLabels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+#         action: replace
+#         targetLabel: __metrics_path__
+#         regex: "(.+)"
+#       - sourceLabels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+#         action: replace
+#         regex: '([^:]+)(?::\d+)?;(\d+)'
+#         replacement: ${1}:${2}
+#         targetLabel: __address__
+#       - action: labelmap
+#         regex: "__meta_kubernetes_pod_label_(.+)"
+#       - sourceLabels: [__meta_kubernetes_namespace]
+#         action: replace
+#         targetLabel: namespace
+#       - sourceLabels: [__meta_kubernetes_pod_name]
+#         action: replace
+#         targetLabel: pod
+#       - sourceLabels: [__meta_kubernetes_pod_container_port_number]
+#         action: keep
+#         regex: '\d+'
