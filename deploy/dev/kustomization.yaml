@@ -3,11 +3,12 @@ kind: Kustomization
 
 resources:
 - ../../kubernetes/resources/flux
-- ../../kubernetes/resources/nativelink-core
+- ../../kubernetes/resources/flux-experimental
 - ../../kubernetes/resources/gateway-routes
-- ../../kubernetes/workers/resources/worker-init
+- ../../kubernetes/resources/nativelink-core
 - ../../kubernetes/workers/resources/lre-cc
 - ../../kubernetes/workers/resources/lre-rs
+- ../../kubernetes/workers/resources/worker-init
 
 # Modify this value to change the repository containing the deployment files.
 #
