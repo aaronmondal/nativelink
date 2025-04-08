@@ -124,7 +124,7 @@ jobs:
       - name: Wait for Tekton resources
         run: >
           nix develop --impure --command
-          bash -c "flux reconcile kustomization -n default \
+          bash -c "flux reconcile kustomization \
             --timeout=15m \
             nativelink-tekton-resources"
 
@@ -133,23 +133,23 @@ jobs:
           TOOLCHAIN: ${{ matrix.toolchain }}
         run: >
           nix develop --impure --command
-          bash -c "flux reconcile kustomization -n default \
+          bash -c "flux reconcile kustomization \
             --timeout=15m \
             nativelink-alert-core && \
-          flux reconcile kustomization -n default \
+          flux reconcile kustomization \
             --timeout=15m \
             nativelink-alert-worker-init && \
-          flux reconcile kustomization -n default \
+          flux reconcile kustomization \
             --timeout=15m \
             nativelink-alert-${TOOLCHAIN}"
 
       - name: Trigger pipelines
         run: |
-          nix develop --impure --command bash -c 'cat > dummy-repo.yaml << EOF
+          nix develop --impure --command bash -c 'cat > nativelink-repo.yaml << EOF
           apiVersion: source.toolkit.fluxcd.io/v1
           kind: GitRepository
           metadata:
-            name: dummy-repository
+            name: nativelink
             namespace: default
           spec:
             interval: 2m
@@ -157,26 +157,27 @@ jobs:
             ref:
               branch: main
           EOF
-          kubectl apply -f dummy-repo.yaml &&
-          rm dummy-repo.yaml'
+          kubectl apply -f nativelink-repo.yaml &&
+          rm nativelink-repo.yaml'
 
       - name: Wait for Tekton pipelines
         run: >
           nix develop --impure --command bash << 'EOF'
-            until pr=$(kubectl get pipelinerun -o name | \
+            until pr=$(kubectl get pipelinerun -n ci -o name | \
                        grep rebuild-nativelink-run-); do
               echo "Waiting for pipeline to be created..."
               sleep 1
             done
 
-            echo "Found pipeline: $pr"
-            kubectl wait --for=create $pr
+            echo "Found pipelinerun: $pr"
+            kubectl wait --for=create -n ci $pr
 
-            echo "Waiting for pipeline to succeed..."
+            echo "Waiting for pipelinerun to succeed..."
             kubectl wait \
               --for=condition=Succeeded \
               --timeout=45m \
               pipelinerun \
+              -n ci \
               -l tekton.dev/pipeline=rebuild-nativelink
           EOF
 
