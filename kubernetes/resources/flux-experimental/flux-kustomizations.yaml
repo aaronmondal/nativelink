@@ -17,3 +17,45 @@ spec:
     kind: GitRepository
     name: nativelink
     namespace: flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: olm
+  namespace: flux-system
+spec:
+  interval: 2m
+  path: "./kubernetes/vendor/olm"
+  prune: true
+  force: true
+  retryInterval: 20s
+  # We don't set targetNamespace for this one as this kustomization manages its
+  # own namespaces.
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: nativelink
+    namespace: flux-system
+  dependsOn:
+    - name: cert-manager
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: olm-catalog
+  namespace: flux-system
+spec:
+  interval: 2m
+  path: "./kubernetes/vendor/olm-catalog"
+  prune: true
+  force: true
+  retryInterval: 20s
+  # We don't set targetNamespace for this one as this kustomization manages its
+  # own namespaces.
+  wait: true
+  sourceRef:
+    kind: GitRepository
+    name: nativelink
+    namespace: flux-system
+  dependsOn:
+    - name: olm
