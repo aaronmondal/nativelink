@@ -20,7 +20,6 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use async_lock::Mutex as AsyncMutex;
 use axum::Router;
 use clap::Parser;
-use futures::FutureExt;
 use futures::future::{BoxFuture, Either, OptionFuture, TryFutureExt, try_join_all};
 use hyper::StatusCode;
 use hyper_util::rt::tokio::TokioIo;
@@ -53,14 +52,13 @@ use nativelink_util::health_utils::HealthRegistryBuilder;
 use nativelink_util::metrics_utils::Counter;
 use nativelink_util::operation_state_manager::ClientStateManager;
 use nativelink_util::origin_context::OriginContext;
-use nativelink_util::origin_event_middleware::OriginEventMiddlewareLayer;
-use nativelink_util::origin_event_publisher::OriginEventPublisher;
 use nativelink_util::shutdown_guard::{Priority, ShutdownGuard};
 use nativelink_util::store_trait::{
     DEFAULT_DIGEST_SIZE_HEALTH_CHECK_CFG, set_default_digest_size_health_check,
 };
 use nativelink_util::task::TaskExecutor;
-use nativelink_util::{background_spawn, fs, init_tracing, spawn};
+use nativelink_util::telemetry::init_tracing;
+use nativelink_util::{background_spawn, fs, spawn};
 use nativelink_worker::local_worker::new_local_worker;
 use parking_lot::{Mutex, RwLock};
 use rustls_pemfile::{certs as extract_certs, crls as extract_crls};
@@ -69,7 +67,7 @@ use tokio::net::TcpListener;
 use tokio::select;
 #[cfg(target_family = "unix")]
 use tokio::signal::unix::{SignalKind, signal};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_rustls::rustls::server::WebPkiClientVerifier;
@@ -86,10 +84,6 @@ const DEFAULT_ADMIN_API_PATH: &str = "/admin";
 
 // Note: This must be kept in sync with the documentation in `HealthConfig::path`.
 const DEFAULT_HEALTH_STATUS_CHECK_PATH: &str = "/status";
-
-// Note: This must be kept in sync with the documentation in
-// `OriginEventsConfig::max_event_queue_size`.
-const DEFAULT_MAX_QUEUE_EVENTS: usize = 65536;
 
 /// Broadcast Channel Capacity
 /// Note: The actual capacity may be greater than the provided capacity.
@@ -224,35 +218,14 @@ async fn inner_main(
 
     let mut root_futures: Vec<BoxFuture<Result<(), Error>>> = Vec::new();
 
-    let maybe_origin_event_tx = cfg
-        .experimental_origin_events
-        .as_ref()
-        .map(|origin_events_cfg| {
-            let mut max_queued_events = origin_events_cfg.max_event_queue_size;
-            if max_queued_events == 0 {
-                max_queued_events = DEFAULT_MAX_QUEUE_EVENTS;
-            }
-            let (tx, rx) = mpsc::channel(max_queued_events);
-            let store_name = origin_events_cfg.publisher.store.as_str();
-            let store = store_manager.get_store(store_name).err_tip(|| {
-                format!("Could not get store {store_name} for origin event publisher")
-            })?;
-
-            root_futures.push(Box::pin(
-                OriginEventPublisher::new(store, rx, shutdown_tx.clone())
-                    .run()
-                    .map(Ok),
-            ));
-
-            Ok::<_, Error>(tx)
-        })
-        .transpose()?;
+    // TODO(aaronmondal): Remove in favor of otel baggage.
+    let maybe_origin_event_tx = None;
 
     let mut action_schedulers = HashMap::new();
     let mut worker_schedulers = HashMap::new();
     for SchedulerConfig { name, spec } in cfg.schedulers.iter().flatten() {
         let (maybe_action_scheduler, maybe_worker_scheduler) =
-            scheduler_factory(spec, &store_manager, maybe_origin_event_tx.as_ref())
+            scheduler_factory(spec, &store_manager, maybe_origin_event_tx)
                 .err_tip(|| format!("Failed to create scheduler '{name}'"))?;
         if let Some(action_scheduler) = maybe_action_scheduler {
             action_schedulers.insert(name.clone(), action_scheduler.clone());
@@ -503,10 +476,7 @@ async fn inner_main(
 
         let mut svc = tonic_services
             .into_axum_router()
-            .layer(OriginEventMiddlewareLayer::new(
-                maybe_origin_event_tx.clone(),
-                server_cfg.experimental_identity_header.clone(),
-            ));
+            .layer(nativelink_util::telemetry::OtlpLayer::new(false));
 
         if let Some(health_cfg) = services.health {
             let path = if health_cfg.path.is_empty() {

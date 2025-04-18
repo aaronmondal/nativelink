@@ -30,7 +30,6 @@ use nativelink_store::grpc_store::GrpcStore;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::make_ctx_for_hash_func;
-use nativelink_util::origin_event::OriginEventContext;
 use nativelink_util::store_trait::{Store, StoreLike};
 use prost::Message;
 use tonic::{Request, Response, Status};
@@ -173,16 +172,18 @@ impl ActionCache for AcServer {
         ret(level = Level::INFO),
         level = Level::ERROR,
         skip_all,
-        fields(request = ?grpc_request.get_ref())
+        fields(
+            instance_name = %grpc_request.get_ref().instance_name,
+            action_digest = ?grpc_request.get_ref().action_digest,
+        )
     )]
     async fn get_action_result(
         &self,
         grpc_request: Request<GetActionResultRequest>,
     ) -> Result<Response<ActionResult>, Status> {
         let request = grpc_request.into_inner();
-        let ctx = OriginEventContext::new(|| &request).await;
 
-        let resp = make_ctx_for_hash_func(request.digest_function)
+        let result = make_ctx_for_hash_func(request.digest_function)
             .err_tip(|| "In AcServer::get_action_result")?
             .wrap_async(
                 error_span!("ac_server_get_action_result"),
@@ -190,12 +191,13 @@ impl ActionCache for AcServer {
             )
             .await;
 
-        if resp.is_err() && resp.as_ref().err().unwrap().code != Code::NotFound {
-            event!(Level::ERROR, return = ?resp);
+        if let Err(ref err) = result {
+            if err.code != Code::NotFound {
+                event!(Level::ERROR, error = ?err, "Error in get_action_result");
+            }
         }
-        let resp = resp.map_err(Into::into);
-        ctx.emit(|| &resp).await;
-        resp
+
+        result.map_err(Into::into)
     }
 
     #[instrument(
@@ -203,23 +205,24 @@ impl ActionCache for AcServer {
         ret(level = Level::INFO),
         level = Level::ERROR,
         skip_all,
-        fields(request = ?grpc_request.get_ref())
+        fields(
+            instance_name = %grpc_request.get_ref().instance_name,
+            action_digest = ?grpc_request.get_ref().action_digest,
+        )
     )]
     async fn update_action_result(
         &self,
         grpc_request: Request<UpdateActionResultRequest>,
     ) -> Result<Response<ActionResult>, Status> {
         let request = grpc_request.into_inner();
-        let ctx = OriginEventContext::new(|| &request).await;
-        let resp = make_ctx_for_hash_func(request.digest_function)
+
+        make_ctx_for_hash_func(request.digest_function)
             .err_tip(|| "In AcServer::update_action_result")?
             .wrap_async(
                 error_span!("ac_server_update_action_result"),
                 self.inner_update_action_result(request),
             )
             .await
-            .map_err(Into::into);
-        ctx.emit(|| &resp).await;
-        resp
+            .map_err(Into::into)
     }
 }
