@@ -1,0 +1,101 @@
+# TODO(aaronmondal): This file is still under construction. Remove from PR.
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMSingle
+metadata:
+  name: vmsingle
+  namespace: default
+spec:
+  retentionPeriod: 1d
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VLogs
+metadata:
+  name: vlogs
+  namespace: default
+spec:
+  retentionPeriod: 1d
+  image:
+    repository: victoriametrics/victoria-logs
+    tag: v1.18.0-victorialogs
+---
+apiVersion: tempo.grafana.com/v1alpha1
+kind: TempoMonolithic
+metadata:
+  name: tempo
+  namespace: default
+spec:
+  observability:
+    grafana:
+      dataSource:
+        enabled: false
+  jaegerui:
+    enabled: true
+    ingress:
+      enabled: true
+    resources:
+      limits:
+        cpu: '2'
+        memory: 2Gi
+  resources:
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  storage:
+    traces:
+      backend: memory
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-collector
+  # TODO(aaronmondal): Should probably run in a dedicated namespace.
+  namespace: default
+spec:
+  mode: daemonset
+  image: otel/opentelemetry-collector-contrib:0.123.0
+  observability:
+    metrics:
+      enableMetrics: true
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+    processors:
+      batch:
+        send_batch_size: 1000
+        timeout: 10s
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+    exporters:
+      prometheusremotewrite:
+        endpoint: "http://vmsingle-vmsingle.default.svc:8429/prometheus/api/v1/write"
+        tls:
+          insecure: true
+      otlphttp:
+        logs_endpoint: "http://vlogs-vlogs.default.svc.cluster.local:9428/insert/opentelemetry/v1/logs"
+        tls:
+          insecure: true
+      otlp:
+        endpoint: "http://tempo-tempo.default.svc.cluster.local:4317"
+        compression: zstd
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp]
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp]
