@@ -5,7 +5,12 @@ import { LinearGradient } from '@qwik/components/text';
 import { BackgroundVideo } from "@qwik/components/video";
 
 
-const allPosts = await getCollection("posts");
+/* const allPosts = await getCollection("posts"); */
+import { getPayload } from 'payload'
+import { config } from '@nativelink/api'
+const payload = await getPayload({ config })
+const allPosts = await payload.find({ collection: 'posts', sort: 'createdAt' })
+
 const announcements = allPosts.filter(post => post.data.tags?.includes('announcements'));
 const caseStudies = allPosts.filter(post => post.data.tags?.includes('case-studies'));
 const blogPosts = allPosts.filter(post => post.data.tags?.includes('blog-posts'));
