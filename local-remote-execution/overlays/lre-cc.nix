@@ -5,6 +5,7 @@
   coreutils,
   findutils,
   gnutar,
+  bash,
   bazel_7,
   writeShellScriptBin,
   rbe-configs-gen,
@@ -63,6 +64,7 @@
         "${coreutils}/bin"
         "${findutils}/bin"
         "${gnutar}/bin"
+        "${bash}/bin"
       ]))
 
     "CC=${lre.clang}/bin/customClang"

@@ -417,6 +417,7 @@
           "${pkgs.lre.clang}/bin"
           "${git}/bin"
           "${python3}/bin"
+          "${bash}/bin"
         ];
         devShells.default = pkgs.mkShell {
           packages = let
