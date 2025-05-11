@@ -15,6 +15,11 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use bytestream_proto::google::bytestream::byte_stream_client::ByteStreamClient;
+use bytestream_proto::google::bytestream::byte_stream_server::ByteStream;
+use bytestream_proto::google::bytestream::{
+    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, WriteRequest, WriteResponse,
+};
 use futures::task::Poll;
 use futures::{Future, poll};
 use http_body_util::BodyExt;
@@ -28,11 +33,6 @@ use nativelink_config::cas_server::ByteStreamConfig;
 use nativelink_config::stores::{MemorySpec, StoreSpec};
 use nativelink_error::{Code, Error, ResultExt, make_err};
 use nativelink_macro::nativelink_test;
-use nativelink_proto::google::bytestream::byte_stream_client::ByteStreamClient;
-use nativelink_proto::google::bytestream::byte_stream_server::ByteStream;
-use nativelink_proto::google::bytestream::{
-    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, WriteRequest, WriteResponse,
-};
 use nativelink_service::bytestream_server::ByteStreamServer;
 use nativelink_store::default_store_factory::store_factory;
 use nativelink_store::store_manager::StoreManager;

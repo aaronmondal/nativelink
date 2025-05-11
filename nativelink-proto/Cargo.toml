@@ -14,15 +14,23 @@ autobenches = false
 
 [lib]
 name = "nativelink_proto"
-path = "genproto/lib.rs"
+path = "genproto/lib.rs"  # Generated.
 # TODO(aaronmondal) We should support doctests.
 doctest = false
 
 [dependencies]
 prost = { version = "0.13.5", default-features = false }
 prost-types = { version = "0.13.5", default-features = false }
-tonic = { version = "0.13.0", features = ["codegen", "prost", "transport", "tls-ring"], default-features = false }
+tonic = { version = "0.13.1", features = ["channel", "codegen", "prost", "transport", "tls-ring"], default-features = false }
+
+# TODO(aaronmondal): Use stable version after https://github.com/neoeinstein/protoc-gen-prost/pull/119/files
+protoc-gen-prost = { git = "https://github.com/SuperFluffy/protoc-gen-prost.git", branch = "bump-tonic" }
+protoc-gen-tonic = { git = "https://github.com/SuperFluffy/protoc-gen-prost.git", branch = "bump-tonic" }
+
+# protoc-gen-tonic = { version = "0.4.1", git = "https://github.com/SuperFluffy/protoc-gen-prost/tree/bump-tonic" }
+# https://github.com/SuperFluffy/protoc-gen-prost/tree/bump-tonic
+# protoc-gen-tonic = { version = "0.4.1" }
 
 [dev-dependencies]
 prost-build = { version = "0.13.5", default-features = false }
-tonic-build = { version = "0.13.0", features = ["prost"], default-features = false }
+tonic-build = { version = "0.13.1", features = ["prost"], default-features = false }

@@ -25,15 +25,10 @@ use nativelink_config::schedulers::WorkerAllocationStrategy;
 use nativelink_error::{Error, ResultExt};
 use nativelink_macro::nativelink_test;
 use nativelink_metric::MetricsComponent;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionResult as ProtoActionResult, ExecuteResponse, ExecutedActionMetadata, LogFile,
-    OutputDirectory, OutputFile, OutputSymlink,
-};
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::worker_api_server::WorkerApi;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     ConnectWorkerRequest, ExecuteResult, KeepAliveRequest, execute_result, update_for_worker,
 };
-use nativelink_proto::google::rpc::Status as ProtoStatus;
 use nativelink_scheduler::api_worker_scheduler::ApiWorkerScheduler;
 use nativelink_scheduler::platform_property_manager::PlatformPropertyManager;
 use nativelink_scheduler::worker::ActionInfoWithProps;
@@ -46,6 +41,11 @@ use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::DigestHasherFunc;
 use nativelink_util::operation_state_manager::{UpdateOperationType, WorkerStateManager};
 use pretty_assertions::assert_eq;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionResult as ProtoActionResult, ExecuteResponse, ExecutedActionMetadata, LogFile,
+    OutputDirectory, OutputFile, OutputSymlink,
+};
+use status_proto::google::rpc::Status as ProtoStatus;
 use tokio::join;
 use tokio::sync::{Notify, mpsc};
 use tokio_stream::StreamExt;
@@ -451,6 +451,8 @@ pub async fn execution_response_success_test() -> Result<(), Box<dyn core::error
                 path: "some path4".to_string(),
                 tree_digest: Some(DigestInfo::new([12u8; 32], 124).into()),
                 is_topologically_sorted: false,
+                // TODO(aaronmondal): Implement this.
+                root_directory_digest: None,
             }],
             output_directory_symlinks: Vec::default(), // Bazel deprecated this.
             exit_code: 5,

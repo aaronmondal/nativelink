@@ -21,16 +21,15 @@ use futures::stream::{FuturesUnordered, Stream};
 use futures::{StreamExt, TryStreamExt};
 use nativelink_config::cas_server::{CasStoreConfig, WithInstanceName};
 use nativelink_error::{Code, Error, ResultExt, error_if, make_input_err};
-use nativelink_proto::build::bazel::remote::execution::v2::content_addressable_storage_server::{
+use remote_execution_proto::build::bazel::remote::execution::v2::content_addressable_storage_server::{
     ContentAddressableStorage, ContentAddressableStorageServer as Server,
 };
-use nativelink_proto::build::bazel::remote::execution::v2::{
+use remote_execution_proto::build::bazel::remote::execution::v2::{
     BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
     BatchUpdateBlobsResponse, Directory, FindMissingBlobsRequest, FindMissingBlobsResponse,
     GetTreeRequest, GetTreeResponse, batch_read_blobs_response, batch_update_blobs_response,
     compressor,
 };
-use nativelink_proto::google::rpc::Status as GrpcStatus;
 use nativelink_store::ac_utils::get_and_decode_digest;
 use nativelink_store::grpc_store::GrpcStore;
 use nativelink_store::store_manager::StoreManager;
@@ -38,6 +37,7 @@ use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::make_ctx_for_hash_func;
 use nativelink_util::origin_event::OriginEventContext;
 use nativelink_util::store_trait::{Store, StoreLike};
+use status_proto::google::rpc::Status as GrpcStatus;
 use tonic::{Request, Response, Status};
 use tracing::{Level, debug, error_span, instrument};
 

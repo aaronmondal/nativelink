@@ -15,10 +15,10 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
+use bytestream_proto::google::bytestream::WriteRequest;
 use futures::StreamExt;
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
-use nativelink_proto::google::bytestream::WriteRequest;
 use nativelink_util::common::DigestInfo;
 use nativelink_util::proto_stream_utils::{
     WriteRequestStreamWrapper, WriteState, WriteStateWrapper,

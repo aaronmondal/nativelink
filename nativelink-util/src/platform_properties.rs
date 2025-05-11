@@ -18,8 +18,8 @@ use std::collections::HashMap;
 use nativelink_metric::{
     MetricFieldData, MetricKind, MetricPublishKnownKindData, MetricsComponent, publish,
 };
-use nativelink_proto::build::bazel::remote::execution::v2::Platform as ProtoPlatform;
-use nativelink_proto::build::bazel::remote::execution::v2::platform::Property as ProtoProperty;
+use remote_execution_proto::build::bazel::remote::execution::v2::Platform as ProtoPlatform;
+use remote_execution_proto::build::bazel::remote::execution::v2::platform::Property as ProtoProperty;
 use serde::{Deserialize, Serialize};
 
 /// `PlatformProperties` helps manage the configuration of platform properties to

@@ -15,6 +15,7 @@ rust_library(
     deps = [
         "//nativelink-metric",
         "//nativelink-proto",
+        "//nativelink-proto:status_proto",
         "@crates//:fred",
         "@crates//:hex",
         "@crates//:prost",

@@ -23,19 +23,19 @@ use nativelink_error::{Error, ResultExt, error_if, make_input_err};
 use nativelink_metric::{
     MetricFieldData, MetricKind, MetricPublishKnownKindData, MetricsComponent, publish,
 };
-use nativelink_proto::build::bazel::remote::execution::v2::{
+use operations_proto::google::longrunning::Operation;
+use operations_proto::google::longrunning::operation::Result as LongRunningResult;
+use prost::Message;
+use prost::bytes::Bytes;
+use prost_types::Any;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
     Action, ActionResult as ProtoActionResult, ExecuteOperationMetadata, ExecuteRequest,
     ExecuteResponse, ExecutedActionMetadata, FileNode, LogFile, OutputDirectory, OutputFile,
     OutputSymlink, SymlinkNode, execution_stage,
 };
-use nativelink_proto::google::longrunning::Operation;
-use nativelink_proto::google::longrunning::operation::Result as LongRunningResult;
-use nativelink_proto::google::rpc::Status;
-use prost::Message;
-use prost::bytes::Bytes;
-use prost_types::Any;
 use serde::ser::Error as SerdeError;
 use serde::{Deserialize, Serialize};
+use status_proto::google::rpc::Status;
 use uuid::Uuid;
 
 use crate::common::{DigestInfo, HashMapExt, VecExt};
@@ -379,6 +379,9 @@ impl From<&ActionInfo> for ExecuteRequest {
             execution_policy: None,     // Not used in the worker.
             results_cache_policy: None, // Not used in the worker.
             digest_function: unique_qualifier.digest_function.proto_digest_func().into(),
+            inline_stdout: false,        // TODO(aaronmonal): Implement this.
+            inline_stderr: false,        // TODO(aaronmonal): Implement this.
+            inline_output_files: vec![], // TODO(aaronmonal): Implement this.
         }
     }
 }
@@ -564,6 +567,7 @@ impl From<DirectoryInfo> for OutputDirectory {
             path: val.path,
             tree_digest: Some(val.tree_digest.into()),
             is_topologically_sorted: false,
+            root_directory_digest: None, // TODO(aaronmondal): Implement this.
         }
     }
 }
@@ -1157,6 +1161,7 @@ impl ActionState {
             stdout_stream_name: String::default(),
             stderr_stream_name: String::default(),
             partial_execution_metadata: None,
+            digest_function: -1, // TODO(aaronmondal): Implement this.
         };
 
         Operation {

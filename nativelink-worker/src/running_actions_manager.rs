@@ -43,11 +43,6 @@ use nativelink_config::cas_server::{
 };
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
 use nativelink_metric::MetricsComponent;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    Action, ActionResult as ProtoActionResult, Command as ProtoCommand,
-    Directory as ProtoDirectory, Directory, DirectoryNode, ExecuteResponse, FileNode, SymlinkNode,
-    Tree as ProtoTree, UpdateActionResultRequest,
-};
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     HistoricalExecuteResponse, StartExecute,
 };
@@ -70,6 +65,11 @@ use nativelink_util::{background_spawn, spawn, spawn_blocking};
 use parking_lot::Mutex;
 use prost::Message;
 use relative_path::RelativePath;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    Action, ActionResult as ProtoActionResult, Command as ProtoCommand,
+    Directory as ProtoDirectory, Directory, DirectoryNode, ExecuteResponse, FileNode, SymlinkNode,
+    Tree as ProtoTree, UpdateActionResultRequest,
+};
 use scopeguard::{ScopeGuard, guard};
 use serde::Deserialize;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
@@ -826,7 +826,7 @@ impl RunningActionImpl {
             let mut envs = command_proto.environment_variables.clone();
             if !envs.iter().any(|v| v.name.to_uppercase() == "SYSTEMROOT") {
                 envs.push(
-                    nativelink_proto::build::bazel::remote::execution::v2::command::EnvironmentVariable {
+                    remote_execution_proto::build::bazel::remote::execution::v2::command::EnvironmentVariable {
                         name: "SystemRoot".to_string(),
                         value: "C:\\Windows".to_string(),
                     },
@@ -834,7 +834,7 @@ impl RunningActionImpl {
             }
             if !envs.iter().any(|v| v.name.to_uppercase() == "PATH") {
                 envs.push(
-                    nativelink_proto::build::bazel::remote::execution::v2::command::EnvironmentVariable {
+                    remote_execution_proto::build::bazel::remote::execution::v2::command::EnvironmentVariable {
                         name: "PATH".to_string(),
                         value: "C:\\Windows\\System32".to_string(),
                     },

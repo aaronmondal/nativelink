@@ -17,16 +17,16 @@ use std::sync::Arc;
 use nativelink_config::stores::MemorySpec;
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionResult as ProtoActionResult, Directory, DirectoryNode, FileNode, OutputDirectory,
-    OutputFile, Tree,
-};
 use nativelink_store::ac_utils::serialize_and_upload_message;
 use nativelink_store::completeness_checking_store::CompletenessCheckingStore;
 use nativelink_store::memory_store::MemoryStore;
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::DigestHasherFunc;
 use nativelink_util::store_trait::{Store, StoreLike};
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionResult as ProtoActionResult, Directory, DirectoryNode, FileNode, OutputDirectory,
+    OutputFile, Tree,
+};
 
 const ROOT_FILE: DigestInfo = DigestInfo::new([0u8; 32], 0);
 const ROOT_DIRECTORY: DigestInfo = DigestInfo::new([1u8; 32], 0);

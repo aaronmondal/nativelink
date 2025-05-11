@@ -24,7 +24,6 @@ use futures::join;
 use nativelink_config::stores::MemorySpec;
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
-use nativelink_proto::build::bazel::remote::execution::v2::ActionResult as ProtoActionResult;
 use nativelink_scheduler::cache_lookup_scheduler::CacheLookupScheduler;
 use nativelink_store::memory_store::MemoryStore;
 use nativelink_util::action_messages::{
@@ -35,6 +34,7 @@ use nativelink_util::operation_state_manager::{ClientStateManager, OperationFilt
 use nativelink_util::store_trait::{Store, StoreLike};
 use pretty_assertions::assert_eq;
 use prost::Message;
+use remote_execution_proto::build::bazel::remote::execution::v2::ActionResult as ProtoActionResult;
 use tokio::sync::watch;
 use tokio::{self};
 use tokio_stream::StreamExt;

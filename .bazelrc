@@ -37,8 +37,8 @@ build --incompatible_strict_action_env
 # Don't use legacy repository rules.
 build --incompatible_disable_native_repo_rules
 
-# Use the earliest supported C++ version for protoc.
-build --cxxopt=-std=c++14 --host_cxxopt=-std=c++14
+# Use our custom prost toolchain for protobuf.
+build --extra_toolchains=@//nativelink-proto:prost_toolchain
 
 build --test_output=errors
 
@@ -98,7 +98,7 @@ build --@rules_rust//:extra_rustc_flag=-Wtrivial_numeric_casts
 build --@rules_rust//:extra_rustc_flag=-Wunreachable_pub
 build --@rules_rust//:extra_rustc_flag=-Wunused_import_braces
 build --@rules_rust//:extra_rustc_flag=-Wunused_lifetimes
-build --@rules_rust//:extra_rustc_flag=-Wunused_qualifications
+# build --@rules_rust//:extra_rustc_flag=-Wunused_qualifications
 build --@rules_rust//:extra_rustc_flag=-Wvariant_size_differences
 
 # Globbal clippy configuration

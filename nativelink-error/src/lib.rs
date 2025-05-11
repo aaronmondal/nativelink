@@ -118,7 +118,7 @@ impl Error {
 
 impl core::error::Error for Error {}
 
-impl From<Error> for nativelink_proto::google::rpc::Status {
+impl From<Error> for status_proto::google::rpc::Status {
     fn from(val: Error) -> Self {
         Self {
             code: val.code as i32,
@@ -128,8 +128,8 @@ impl From<Error> for nativelink_proto::google::rpc::Status {
     }
 }
 
-impl From<nativelink_proto::google::rpc::Status> for Error {
-    fn from(val: nativelink_proto::google::rpc::Status) -> Self {
+impl From<status_proto::google::rpc::Status> for Error {
+    fn from(val: status_proto::google::rpc::Status) -> Self {
         Self {
             code: val.code.into(),
             messages: vec![val.message],

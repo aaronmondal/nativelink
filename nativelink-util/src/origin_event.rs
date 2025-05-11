@@ -18,17 +18,15 @@ use std::sync::{Arc, OnceLock};
 
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD_NO_PAD;
+use bytestream_proto::google::bytestream::{
+    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, ReadResponse, WriteRequest,
+    WriteResponse,
+};
 use futures::future::ready;
 use futures::task::{Context, Poll};
 use futures::{Future, FutureExt, Stream, StreamExt};
 use nativelink_proto::build::bazel::remote::asset::v1::{
     FetchBlobRequest, FetchBlobResponse, PushBlobRequest, PushBlobResponse,
-};
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionResult, BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
-    BatchUpdateBlobsResponse, ExecuteRequest, FindMissingBlobsRequest, FindMissingBlobsResponse,
-    GetActionResultRequest, GetCapabilitiesRequest, GetTreeRequest, GetTreeResponse,
-    RequestMetadata, ServerCapabilities, UpdateActionResultRequest, WaitExecutionRequest,
 };
 use nativelink_proto::com::github::trace_machina::nativelink::events::{
     BatchReadBlobsResponseOverride, BatchUpdateBlobsRequestOverride, Event, OriginEvent,
@@ -37,16 +35,18 @@ use nativelink_proto::com::github::trace_machina::nativelink::events::{
     response_event, stream_event,
 };
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::StartExecute;
-use nativelink_proto::google::bytestream::{
-    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, ReadResponse, WriteRequest,
-    WriteResponse,
-};
-use nativelink_proto::google::longrunning::Operation;
-use nativelink_proto::google::rpc::Status;
+use operations_proto::google::longrunning::Operation;
 use pin_project_lite::pin_project;
 use prost::Message;
 use rand::RngCore;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionResult, BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
+    BatchUpdateBlobsResponse, ExecuteRequest, FindMissingBlobsRequest, FindMissingBlobsResponse,
+    GetActionResultRequest, GetCapabilitiesRequest, GetTreeRequest, GetTreeResponse,
+    RequestMetadata, ServerCapabilities, UpdateActionResultRequest, WaitExecutionRequest,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use status_proto::google::rpc::Status;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TrySendError;
 use tonic::{Response, Status as TonicStatus, Streaming};

@@ -24,8 +24,8 @@ use nativelink_error::{Error, ResultExt, make_input_err};
 use nativelink_metric::{
     MetricFieldData, MetricKind, MetricPublishKnownKindData, MetricsComponent,
 };
-use nativelink_proto::build::bazel::remote::execution::v2::Digest;
 use prost::Message;
+use remote_execution_proto::build::bazel::remote::execution::v2::Digest;
 use serde::de::Visitor;
 use serde::ser::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};

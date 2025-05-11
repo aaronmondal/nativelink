@@ -18,9 +18,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use nativelink_error::{Code, Error, ResultExt, make_err};
 use nativelink_metric::{MetricsComponent, RootMetricsComponent};
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionResult as ProtoActionResult, GetActionResultRequest,
-};
 use nativelink_store::ac_utils::get_and_decode_digest;
 use nativelink_store::grpc_store::GrpcStore;
 use nativelink_util::action_messages::{
@@ -37,6 +34,9 @@ use nativelink_util::origin_context::ActiveOriginContext;
 use nativelink_util::origin_event::{ORIGIN_EVENT_COLLECTOR, OriginMetadata};
 use nativelink_util::store_trait::Store;
 use parking_lot::{Mutex, MutexGuard};
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionResult as ProtoActionResult, GetActionResultRequest,
+};
 use scopeguard::guard;
 use tokio::sync::oneshot;
 use tonic::{Request, Response};

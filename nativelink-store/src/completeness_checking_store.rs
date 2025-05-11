@@ -21,15 +21,15 @@ use futures::stream::{FuturesUnordered, StreamExt};
 use futures::{FutureExt, TryFutureExt, select};
 use nativelink_error::{Code, Error, ResultExt, make_err};
 use nativelink_metric::MetricsComponent;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionResult as ProtoActionResult, OutputDirectory as ProtoOutputDirectory, Tree as ProtoTree,
-};
 use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::common::DigestInfo;
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
 use nativelink_util::metrics_utils::CounterWithTime;
 use nativelink_util::store_trait::{Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo};
 use parking_lot::Mutex;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionResult as ProtoActionResult, OutputDirectory as ProtoOutputDirectory, Tree as ProtoTree,
+};
 use tokio::sync::Notify;
 use tracing::warn;
 

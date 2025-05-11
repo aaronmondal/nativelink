@@ -23,12 +23,6 @@ use futures::{StreamExt, TryFutureExt};
 use nativelink_config::schedulers::GrpcSpec;
 use nativelink_error::{Code, Error, ResultExt, error_if, make_err};
 use nativelink_metric::{MetricsComponent, RootMetricsComponent};
-use nativelink_proto::build::bazel::remote::execution::v2::capabilities_client::CapabilitiesClient;
-use nativelink_proto::build::bazel::remote::execution::v2::execution_client::ExecutionClient;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ExecuteRequest, ExecutionPolicy, GetCapabilitiesRequest, WaitExecutionRequest,
-};
-use nativelink_proto::google::longrunning::Operation;
 use nativelink_util::action_messages::{
     ActionInfo, ActionState, ActionUniqueQualifier, DEFAULT_EXECUTION_PRIORITY, OperationId,
 };
@@ -40,8 +34,14 @@ use nativelink_util::operation_state_manager::{
 use nativelink_util::origin_event::OriginMetadata;
 use nativelink_util::retry::{Retrier, RetryResult};
 use nativelink_util::{background_spawn, tls_utils};
+use operations_proto::google::longrunning::Operation;
 use parking_lot::Mutex;
 use rand::Rng;
+use remote_execution_proto::build::bazel::remote::execution::v2::capabilities_client::CapabilitiesClient;
+use remote_execution_proto::build::bazel::remote::execution::v2::execution_client::ExecutionClient;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ExecuteRequest, ExecutionPolicy, GetCapabilitiesRequest, WaitExecutionRequest,
+};
 use tokio::select;
 use tokio::sync::watch;
 use tokio::time::sleep;
@@ -282,6 +282,10 @@ impl GrpcScheduler {
                 .digest_function()
                 .proto_digest_func()
                 .into(),
+            // TODO(aaronmondal): Implement these.
+            inline_output_files: vec![],
+            inline_stdout: false,
+            inline_stderr: false,
         };
         let result_stream = self
             .perform_request(request, |request| async move {

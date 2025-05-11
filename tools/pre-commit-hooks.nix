@@ -3,7 +3,7 @@
   nightly-rust,
   ...
 }: let
-  excludes = ["nativelink-proto/genproto" "native-cli/vendor"];
+  excludes = ["native-cli/vendor"];
 in {
   # Default hooks
   check-case-conflicts = {
@@ -129,6 +129,7 @@ in {
   # Rust
   rustfmt = {
     enable = true;
+    excludes = ["nativelink-proto"];
     packageOverrides.cargo = nightly-rust.cargo;
     packageOverrides.rustfmt = nightly-rust.rustfmt;
   };

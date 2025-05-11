@@ -15,6 +15,18 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use build_proto::google::devtools::build::v1::build_event::console_output::Output;
+use build_proto::google::devtools::build::v1::build_event::{
+    BuildEnqueued, BuildFinished, ConsoleOutput, Event, InvocationAttemptFinished,
+    InvocationAttemptStarted,
+};
+use build_proto::google::devtools::build::v1::publish_build_event_server::PublishBuildEvent;
+use build_proto::google::devtools::build::v1::publish_lifecycle_event_request::ServiceLevel;
+use build_proto::google::devtools::build::v1::stream_id::BuildComponent;
+use build_proto::google::devtools::build::v1::{
+    BuildEvent, BuildStatus, ConsoleOutputStream, OrderedBuildEvent,
+    PublishBuildToolEventStreamRequest, PublishLifecycleEventRequest, StreamId, build_status,
+};
 use futures::StreamExt;
 use hyper::body::Frame;
 use nativelink_config::cas_server::BepConfig;
@@ -22,18 +34,6 @@ use nativelink_config::stores::{MemorySpec, StoreSpec};
 use nativelink_error::{Error, ResultExt};
 use nativelink_macro::nativelink_test;
 use nativelink_proto::com::github::trace_machina::nativelink::events::{BepEvent, bep_event};
-use nativelink_proto::google::devtools::build::v1::build_event::console_output::Output;
-use nativelink_proto::google::devtools::build::v1::build_event::{
-    BuildEnqueued, BuildFinished, ConsoleOutput, Event, InvocationAttemptFinished,
-    InvocationAttemptStarted,
-};
-use nativelink_proto::google::devtools::build::v1::publish_build_event_server::PublishBuildEvent;
-use nativelink_proto::google::devtools::build::v1::publish_lifecycle_event_request::ServiceLevel;
-use nativelink_proto::google::devtools::build::v1::stream_id::BuildComponent;
-use nativelink_proto::google::devtools::build::v1::{
-    BuildEvent, BuildStatus, ConsoleOutputStream, OrderedBuildEvent,
-    PublishBuildToolEventStreamRequest, PublishLifecycleEventRequest, StreamId, build_status,
-};
 use nativelink_service::bep_server::BepServer;
 use nativelink_store::default_store_factory::store_factory;
 use nativelink_store::store_manager::StoreManager;

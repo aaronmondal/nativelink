@@ -21,18 +21,18 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
+use bytestream_proto::google::bytestream::byte_stream_server::{
+    ByteStream, ByteStreamServer as Server,
+};
+use bytestream_proto::google::bytestream::{
+    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, ReadResponse, WriteRequest,
+    WriteResponse,
+};
 use futures::future::{BoxFuture, pending};
 use futures::stream::unfold;
 use futures::{Future, Stream, TryFutureExt, try_join};
 use nativelink_config::cas_server::ByteStreamConfig;
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
-use nativelink_proto::google::bytestream::byte_stream_server::{
-    ByteStream, ByteStreamServer as Server,
-};
-use nativelink_proto::google::bytestream::{
-    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, ReadResponse, WriteRequest,
-    WriteResponse,
-};
 use nativelink_store::grpc_store::GrpcStore;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::buf_channel::{

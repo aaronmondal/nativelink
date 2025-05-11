@@ -19,22 +19,22 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::BytesMut;
+use bytestream_proto::google::bytestream::byte_stream_client::ByteStreamClient;
+use bytestream_proto::google::bytestream::{
+    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, ReadResponse, WriteRequest,
+    WriteResponse,
+};
 use futures::stream::{FuturesUnordered, unfold};
 use futures::{Future, Stream, StreamExt, TryFutureExt, TryStreamExt, future};
 use nativelink_config::stores::GrpcSpec;
 use nativelink_error::{Error, ResultExt, error_if, make_input_err};
 use nativelink_metric::MetricsComponent;
-use nativelink_proto::build::bazel::remote::execution::v2::action_cache_client::ActionCacheClient;
-use nativelink_proto::build::bazel::remote::execution::v2::content_addressable_storage_client::ContentAddressableStorageClient;
-use nativelink_proto::build::bazel::remote::execution::v2::{
+use remote_execution_proto::build::bazel::remote::execution::v2::action_cache_client::ActionCacheClient;
+use remote_execution_proto::build::bazel::remote::execution::v2::content_addressable_storage_client::ContentAddressableStorageClient;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
     ActionResult, BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
     BatchUpdateBlobsResponse, FindMissingBlobsRequest, FindMissingBlobsResponse,
     GetActionResultRequest, GetTreeRequest, GetTreeResponse, UpdateActionResultRequest,
-};
-use nativelink_proto::google::bytestream::byte_stream_client::ByteStreamClient;
-use nativelink_proto::google::bytestream::{
-    QueryWriteStatusRequest, QueryWriteStatusResponse, ReadRequest, ReadResponse, WriteRequest,
-    WriteResponse,
 };
 use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::common::DigestInfo;

@@ -24,13 +24,6 @@ use futures::stream::unfold;
 use futures::{Stream, StreamExt};
 use nativelink_config::cas_server::{ExecutionConfig, InstanceName, WithInstanceName};
 use nativelink_error::{Error, ResultExt, make_input_err};
-use nativelink_proto::build::bazel::remote::execution::v2::execution_server::{
-    Execution, ExecutionServer as Server,
-};
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    Action, Command, ExecuteRequest, WaitExecutionRequest,
-};
-use nativelink_proto::google::longrunning::Operation;
 use nativelink_store::ac_utils::get_and_decode_digest;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::action_messages::{
@@ -43,6 +36,13 @@ use nativelink_util::operation_state_manager::{
 };
 use nativelink_util::origin_event::OriginEventContext;
 use nativelink_util::store_trait::Store;
+use operations_proto::google::longrunning::Operation;
+use remote_execution_proto::build::bazel::remote::execution::v2::execution_server::{
+    Execution, ExecutionServer as Server,
+};
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    Action, Command, ExecuteRequest, WaitExecutionRequest,
+};
 use tonic::{Request, Response, Status};
 use tracing::{Level, debug, error, error_span, info, instrument};
 

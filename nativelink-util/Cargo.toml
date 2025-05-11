@@ -46,7 +46,7 @@ tokio-stream = { version = "0.1.17", features = [
   "fs",
 ], default-features = false }
 tokio-util = { version = "0.7.14" }
-tonic = { version = "0.13.0", features = [
+tonic = { version = "0.13.1", features = [
   "tls-ring",
   "transport",
 ], default-features = false }

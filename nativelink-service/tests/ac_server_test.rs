@@ -20,10 +20,6 @@ use nativelink_config::cas_server::WithInstanceName;
 use nativelink_config::stores::{MemorySpec, StoreSpec};
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
-use nativelink_proto::build::bazel::remote::execution::v2::action_cache_server::ActionCache;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionResult, Digest, GetActionResultRequest, UpdateActionResultRequest, digest_function,
-};
 use nativelink_service::ac_server::AcServer;
 use nativelink_store::default_store_factory::store_factory;
 use nativelink_store::store_manager::StoreManager;
@@ -31,6 +27,10 @@ use nativelink_util::common::DigestInfo;
 use nativelink_util::store_trait::StoreLike;
 use pretty_assertions::assert_eq;
 use prost::Message;
+use remote_execution_proto::build::bazel::remote::execution::v2::action_cache_server::ActionCache;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionResult, Digest, GetActionResultRequest, UpdateActionResultRequest, digest_function,
+};
 use tonic::{Code, Request, Response, Status};
 
 const INSTANCE_NAME: &str = "foo_instance_name";

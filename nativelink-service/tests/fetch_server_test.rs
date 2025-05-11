@@ -17,9 +17,9 @@ use nativelink_error::{Code, make_err};
 use nativelink_macro::nativelink_test;
 use nativelink_proto::build::bazel::remote::asset::v1::fetch_server::Fetch;
 use nativelink_proto::build::bazel::remote::asset::v1::{FetchBlobRequest, FetchBlobResponse};
-use nativelink_proto::build::bazel::remote::execution::v2::digest_function;
 use nativelink_service::fetch_server::FetchServer;
 use nativelink_store::store_manager::StoreManager;
+use remote_execution_proto::build::bazel::remote::execution::v2::digest_function;
 use tonic::{Request, Status};
 
 #[nativelink_test]

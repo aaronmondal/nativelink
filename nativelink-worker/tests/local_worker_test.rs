@@ -33,8 +33,6 @@ use nativelink_config::cas_server::{LocalWorkerConfig, WorkerProperty};
 use nativelink_config::stores::{FastSlowSpec, FilesystemSpec, MemorySpec, StoreSpec};
 use nativelink_error::{Code, Error, make_err, make_input_err};
 use nativelink_macro::nativelink_test;
-use nativelink_proto::build::bazel::remote::execution::v2::Platform;
-use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::update_for_worker::Update;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     ConnectWorkerRequest, ConnectionResult, ExecuteResult, KillOperationRequest, StartExecute,
@@ -54,6 +52,8 @@ use nativelink_worker::local_worker::new_local_worker;
 use pretty_assertions::assert_eq;
 use prost::Message;
 use rand::Rng;
+use remote_execution_proto::build::bazel::remote::execution::v2::Platform;
+use remote_execution_proto::build::bazel::remote::execution::v2::platform::Property;
 use tokio::io::AsyncWriteExt;
 use tonic::Response;
 use utils::local_worker_test_utils::{

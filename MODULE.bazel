@@ -7,8 +7,8 @@ module(
 bazel_dep(name = "rules_cc", version = "0.1.1")
 bazel_dep(name = "platforms", version = "0.0.11")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
-bazel_dep(name = "rules_python", version = "1.2.0")
-bazel_dep(name = "rules_shell", version = "0.4.0")
+bazel_dep(name = "rules_python", version = "1.4.1")
+bazel_dep(name = "rules_shell", version = "0.4.1")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
@@ -16,18 +16,19 @@ python.toolchain(
     # TODO(aaronmondal): Fix or remove legacy container pipelines so that they
     #                    run rootless.
     ignore_root_user_error = True,
-    python_version = "3.12",
+    python_version = "3.13",
 )
 use_repo(python, python = "python_versions")
 
-bazel_dep(name = "rules_rust", version = "0.59.2")
+bazel_dep(name = "rules_rust_prost", version = "0.61.0")
+bazel_dep(name = "rules_rust", version = "0.61.0")
 archive_override(
     module_name = "rules_rust",
-    integrity = "sha256-CeF7R8AVBGVjGqMZ8nQnYKQ+3tqy6cAS+R0K4u/wImg=",
+    integrity = "sha256-U8G6x+xI985IxMHGqgBvJ1Fa3SrrBXJZNyJObgDsfOo=",
     patch_strip = 1,
     patches = ["//tools:rules_rust-musl-platforms.diff"],
     urls = [
-        "https://github.com/bazelbuild/rules_rust/releases/download/0.59.2/rules_rust-0.59.2.tar.gz",
+        "https://github.com/bazelbuild/rules_rust/releases/download/0.61.0/rules_rust-0.61.0.tar.gz",
     ],
 )
 
@@ -62,7 +63,17 @@ crate.from_cargo(
         "x86_64-unknown-linux-musl",
     ],
 )
+crate.annotation(
+    crate = "protoc-gen-prost",
+    gen_binaries = ["protoc-gen-prost"],
+)
+crate.annotation(
+    crate = "protoc-gen-tonic",
+    gen_binaries = ["protoc-gen-tonic"],
+)
 use_repo(crate, "crates")
+
+bazel_dep(name = "googleapis", version = "0.0.0-20241220-5e258e33.bcr.1")
 
 # NativeLink uses Local Remote Execution for Rust by default which automatically
 # handles Rust toolchain configuration via Nix.
@@ -109,6 +120,18 @@ rust.toolchain(
 use_repo(rust, "rust_toolchains")
 
 bazel_dep(name = "toolchains_protoc", version = "0.3.7")
+bazel_dep(name = "protobuf", version = "29.3")
+
+# Manually pinned.
+bazel_dep(name = "bazel_remote_apis", version = "0")
+archive_override(
+    module_name = "bazel_remote_apis",
+    integrity = "sha256-DK5tNGcGZz/0tE22S7uxGDSif4aBgdiWqwqjUFoQxTg=",
+    strip_prefix = "remote-apis-536ec595e1df0064bb37aecc95332a661b8c79b2",
+    urls = [
+        "https://github.com/bazelbuild/remote-apis/archive/536ec595e1df0064bb37aecc95332a661b8c79b2.tar.gz",
+    ],
+)
 
 protoc = use_extension("@toolchains_protoc//protoc:extensions.bzl", "protoc")
 protoc.toolchain(

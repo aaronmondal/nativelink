@@ -22,7 +22,7 @@ use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
 use nativelink_metric::{
     MetricFieldData, MetricKind, MetricPublishKnownKindData, MetricsComponent,
 };
-use nativelink_proto::build::bazel::remote::execution::v2::digest_function::Value as ProtoDigestFunction;
+use remote_execution_proto::build::bazel::remote::execution::v2::digest_function::Value as ProtoDigestFunction;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};

@@ -20,14 +20,13 @@ use nativelink_config::cas_server::WithInstanceName;
 use nativelink_config::stores::{MemorySpec, StoreSpec};
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
-use nativelink_proto::build::bazel::remote::execution::v2::content_addressable_storage_server::ContentAddressableStorage;
-use nativelink_proto::build::bazel::remote::execution::v2::{
+use remote_execution_proto::build::bazel::remote::execution::v2::content_addressable_storage_server::ContentAddressableStorage;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
     BatchReadBlobsRequest, BatchReadBlobsResponse, BatchUpdateBlobsRequest,
     BatchUpdateBlobsResponse, Digest, Directory, DirectoryNode, FindMissingBlobsRequest,
     GetTreeRequest, GetTreeResponse, NodeProperties, batch_read_blobs_response,
     batch_update_blobs_request, batch_update_blobs_response, compressor, digest_function,
 };
-use nativelink_proto::google::rpc::Status as GrpcStatus;
 use nativelink_service::cas_server::CasServer;
 use nativelink_store::ac_utils::serialize_and_upload_message;
 use nativelink_store::default_store_factory::store_factory;
@@ -37,6 +36,7 @@ use nativelink_util::digest_hasher::DigestHasherFunc;
 use nativelink_util::store_trait::{StoreKey, StoreLike};
 use pretty_assertions::assert_eq;
 use prost_types::Timestamp;
+use status_proto::google::rpc::Status as GrpcStatus;
 use tonic::{Code, Request};
 
 const INSTANCE_NAME: &str = "foo_instance_name";

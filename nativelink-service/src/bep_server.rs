@@ -15,18 +15,18 @@
 use core::pin::Pin;
 use std::borrow::Cow;
 
+use build_proto::google::devtools::build::v1::publish_build_event_server::{
+    PublishBuildEvent, PublishBuildEventServer,
+};
+use build_proto::google::devtools::build::v1::{
+    PublishBuildToolEventStreamRequest, PublishBuildToolEventStreamResponse,
+    PublishLifecycleEventRequest,
+};
 use bytes::BytesMut;
 use futures::Stream;
 use futures::stream::unfold;
 use nativelink_error::{Error, ResultExt};
 use nativelink_proto::com::github::trace_machina::nativelink::events::{BepEvent, bep_event};
-use nativelink_proto::google::devtools::build::v1::publish_build_event_server::{
-    PublishBuildEvent, PublishBuildEventServer,
-};
-use nativelink_proto::google::devtools::build::v1::{
-    PublishBuildToolEventStreamRequest, PublishBuildToolEventStreamResponse,
-    PublishLifecycleEventRequest,
-};
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::origin_context::{ActiveOriginContext, ORIGIN_IDENTITY};
 use nativelink_util::store_trait::{Store, StoreDriver, StoreKey, StoreLike};

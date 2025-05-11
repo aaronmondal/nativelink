@@ -21,8 +21,8 @@ use std::process::Stdio;
 use futures::future::try_join_all;
 use nativelink_config::cas_server::WorkerProperty;
 use nativelink_error::{Error, ResultExt, make_err, make_input_err};
-use nativelink_proto::build::bazel::remote::execution::v2::platform::Property;
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::ConnectWorkerRequest;
+use remote_execution_proto::build::bazel::remote::execution::v2::platform::Property;
 use tokio::process;
 use tracing::info;
 

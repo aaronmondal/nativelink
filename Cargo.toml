@@ -59,7 +59,7 @@ tokio = { version = "1.44.1", features = [
 tokio-rustls = { version = "0.26.2", default-features = false, features = [
   "ring",
 ] }
-tonic = { version = "0.13.0", features = [
+tonic = { version = "0.13.1", features = [
   "tls-ring",
   "transport",
 ], default-features = false }

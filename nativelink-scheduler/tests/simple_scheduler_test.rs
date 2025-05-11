@@ -29,9 +29,6 @@ use nativelink_config::schedulers::{PropertyType, SimpleSpec};
 use nativelink_error::{Code, Error, ResultExt, make_err};
 use nativelink_macro::nativelink_test;
 use nativelink_metric::MetricsComponent;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ExecuteRequest, Platform, digest_function,
-};
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     ConnectionResult, StartExecute, UpdateForWorker, update_for_worker,
 };
@@ -55,6 +52,9 @@ use nativelink_util::operation_state_manager::{
 };
 use nativelink_util::platform_properties::{PlatformProperties, PlatformPropertyValue};
 use pretty_assertions::assert_eq;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ExecuteRequest, Platform, digest_function,
+};
 use tokio::sync::{Notify, mpsc};
 use utils::scheduler_utils::{INSTANCE_NAME, make_base_action_info};
 

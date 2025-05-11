@@ -19,9 +19,9 @@ use core::task::{Context, Poll};
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use bytestream_proto::google::bytestream::{ReadResponse, WriteRequest};
 use futures::{Stream, StreamExt};
 use nativelink_error::{Error, ResultExt, error_if, make_input_err};
-use nativelink_proto::google::bytestream::{ReadResponse, WriteRequest};
 use parking_lot::Mutex;
 use tonic::{Status, Streaming};
 

@@ -19,12 +19,6 @@ use std::collections::HashMap;
 use bytes::BytesMut;
 use nativelink_config::cas_server::{AcStoreConfig, WithInstanceName};
 use nativelink_error::{Code, Error, ResultExt, make_err, make_input_err};
-use nativelink_proto::build::bazel::remote::execution::v2::action_cache_server::{
-    ActionCache, ActionCacheServer as Server,
-};
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionResult, GetActionResultRequest, UpdateActionResultRequest,
-};
 use nativelink_store::ac_utils::{ESTIMATED_DIGEST_SIZE, get_and_decode_digest};
 use nativelink_store::grpc_store::GrpcStore;
 use nativelink_store::store_manager::StoreManager;
@@ -33,6 +27,12 @@ use nativelink_util::digest_hasher::make_ctx_for_hash_func;
 use nativelink_util::origin_event::OriginEventContext;
 use nativelink_util::store_trait::{Store, StoreLike};
 use prost::Message;
+use remote_execution_proto::build::bazel::remote::execution::v2::action_cache_server::{
+    ActionCache, ActionCacheServer as Server,
+};
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionResult, GetActionResultRequest, UpdateActionResultRequest,
+};
 use tonic::{Request, Response, Status};
 use tracing::{Level, error, error_span, instrument};
 

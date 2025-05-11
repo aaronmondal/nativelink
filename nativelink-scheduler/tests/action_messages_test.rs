@@ -17,16 +17,16 @@ use std::time::SystemTime;
 
 use nativelink_error::Error;
 use nativelink_macro::nativelink_test;
-use nativelink_proto::build::bazel::remote::execution::v2::ExecuteResponse;
-use nativelink_proto::google::longrunning::{Operation, operation};
-use nativelink_proto::google::rpc::Status;
 use nativelink_util::action_messages::{
     ActionResult, ActionStage, ActionState, ActionUniqueKey, ActionUniqueQualifier,
     ExecutionMetadata, OperationId,
 };
 use nativelink_util::common::DigestInfo;
 use nativelink_util::digest_hasher::DigestHasherFunc;
+use operations_proto::google::longrunning::{Operation, operation};
 use pretty_assertions::assert_eq;
+use remote_execution_proto::build::bazel::remote::execution::v2::ExecuteResponse;
+use status_proto::google::rpc::Status;
 
 #[nativelink_test]
 async fn action_state_any_url_test() -> Result<(), Error> {

@@ -31,17 +31,9 @@ use nativelink_config::cas_server::EnvironmentSource;
 use nativelink_config::stores::{FastSlowSpec, FilesystemSpec, MemorySpec, StoreSpec};
 use nativelink_error::{Code, Error, ResultExt, make_input_err};
 use nativelink_macro::nativelink_test;
-use nativelink_proto::build::bazel::remote::execution::v2::command::EnvironmentVariable;
-#[cfg_attr(target_family = "windows", allow(unused_imports))]
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    Action, ActionResult as ProtoActionResult, Command, Directory, DirectoryNode, ExecuteRequest,
-    ExecuteResponse, FileNode, NodeProperties, Platform, SymlinkNode, Tree,
-    digest_function::Value as ProtoDigestFunction, platform::Property,
-};
 use nativelink_proto::com::github::trace_machina::nativelink::remote_execution::{
     HistoricalExecuteResponse, StartExecute,
 };
-use nativelink_proto::google::rpc::Status;
 use nativelink_store::ac_utils::{get_and_decode_digest, serialize_and_upload_message};
 use nativelink_store::fast_slow_store::FastSlowStore;
 use nativelink_store::filesystem_store::FilesystemStore;
@@ -63,7 +55,15 @@ use nativelink_worker::running_actions_manager::{
 use pretty_assertions::assert_eq;
 use prost::Message;
 use rand::Rng;
+use remote_execution_proto::build::bazel::remote::execution::v2::command::EnvironmentVariable;
+#[cfg_attr(target_family = "windows", allow(unused_imports))]
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    Action, ActionResult as ProtoActionResult, Command, Directory, DirectoryNode, ExecuteRequest,
+    ExecuteResponse, FileNode, NodeProperties, Platform, SymlinkNode, Tree,
+    digest_function::Value as ProtoDigestFunction, platform::Property,
+};
 use serial_test::serial;
+use status_proto::google::rpc::Status;
 use tokio::sync::oneshot;
 
 /// Get temporary path from either `TEST_TMPDIR` or best effort temp directory if

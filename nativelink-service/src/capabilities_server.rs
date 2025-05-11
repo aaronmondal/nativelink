@@ -17,20 +17,20 @@ use std::sync::Arc;
 
 use nativelink_config::cas_server::{CapabilitiesConfig, InstanceName, WithInstanceName};
 use nativelink_error::{Error, ResultExt};
-use nativelink_proto::build::bazel::remote::execution::v2::capabilities_server::{
-    Capabilities, CapabilitiesServer as Server,
-};
-use nativelink_proto::build::bazel::remote::execution::v2::digest_function::Value as DigestFunction;
-use nativelink_proto::build::bazel::remote::execution::v2::priority_capabilities::PriorityRange;
-use nativelink_proto::build::bazel::remote::execution::v2::symlink_absolute_path_strategy::Value as SymlinkAbsolutePathStrategy;
-use nativelink_proto::build::bazel::remote::execution::v2::{
-    ActionCacheUpdateCapabilities, CacheCapabilities, ExecutionCapabilities,
-    GetCapabilitiesRequest, PriorityCapabilities, ServerCapabilities,
-};
-use nativelink_proto::build::bazel::semver::SemVer;
 use nativelink_util::digest_hasher::default_digest_hasher_func;
 use nativelink_util::operation_state_manager::ClientStateManager;
 use nativelink_util::origin_event::OriginEventContext;
+use remote_execution_proto::build::bazel::remote::execution::v2::capabilities_server::{
+    Capabilities, CapabilitiesServer as Server,
+};
+use remote_execution_proto::build::bazel::remote::execution::v2::digest_function::Value as DigestFunction;
+use remote_execution_proto::build::bazel::remote::execution::v2::priority_capabilities::PriorityRange;
+use remote_execution_proto::build::bazel::remote::execution::v2::symlink_absolute_path_strategy::Value as SymlinkAbsolutePathStrategy;
+use remote_execution_proto::build::bazel::remote::execution::v2::{
+    ActionCacheUpdateCapabilities, CacheCapabilities, ExecutionCapabilities,
+    GetCapabilitiesRequest, PriorityCapabilities, ServerCapabilities,
+};
+use semver_proto::build::bazel::semver::SemVer;
 use tonic::{Request, Response, Status};
 use tracing::{Level, instrument, warn};
 
@@ -142,6 +142,8 @@ impl Capabilities for CapabilitiesServer {
                 symlink_absolute_path_strategy: SymlinkAbsolutePathStrategy::Disallowed.into(),
                 supported_compressors: vec![],
                 supported_batch_update_compressors: vec![],
+                // TODO(aaronmondal): Implement this.
+                max_cas_blob_size_bytes: -1,
             }),
             execution_capabilities,
             deprecated_api_version: None,
