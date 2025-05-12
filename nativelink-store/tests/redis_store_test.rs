@@ -28,19 +28,19 @@ use fred::types::Value as RedisValue;
 use fred::types::config::{Config as RedisConfig, PerformanceConfig};
 use nativelink_error::{Code, Error};
 use nativelink_macro::nativelink_test;
-use nativelink_metric::{MetricFieldData, MetricKind, MetricsComponent, RootMetricsComponent};
-use nativelink_metric_collector::MetricsCollectorLayer;
 use nativelink_store::cas_utils::ZERO_BYTE_DIGESTS;
 use nativelink_store::redis_store::RedisStore;
 use nativelink_store::store_manager::StoreManager;
 use nativelink_util::buf_channel::make_buf_channel_pair;
 use nativelink_util::common::DigestInfo;
 use nativelink_util::store_trait::{Store, StoreKey, StoreLike, UploadSizeInfo};
-use parking_lot::RwLock;
+use opentelemetry::KeyValue;
+use opentelemetry::metrics::MeterProvider;
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::metrics::data::Sum;
+use opentelemetry_sdk::metrics::{InMemoryMetricExporter, PeriodicReader, SdkMeterProvider};
 use pretty_assertions::assert_eq;
-use serde_json::{Value, from_str, to_string};
 use tokio::sync::watch;
-use tracing_subscriber::layer::SubscriberExt;
 
 const VALID_HASH1: &str = "3031323334353637383961626364656630303030303030303030303030303030";
 const TEMP_UUID: &str = "550e8400-e29b-41d4-a716-446655440000";
@@ -987,74 +987,190 @@ async fn dont_loop_forever_on_empty() -> Result<(), Error> {
     Ok(())
 }
 
+// // #[nativelink_test]
+// #[nativelink_test]
+// async fn test_redis_fingerprint_metric() -> Result<(), Error> {
+//     let expected_fingerprint_value: String = String::from("3e762c15");
+//
+//     // Set up metrics collection
+//     let exporter = InMemoryMetricExporter::default();
+//     let provider = SdkMeterProvider::builder()
+//         .with_reader(PeriodicReader::builder(exporter.clone()).build())
+//         .with_resource(
+//             Resource::builder()
+//                 .with_service_name("test_service")
+//                 .build(),
+//         )
+//         .build();
+//     opentelemetry::global::set_meter_provider(provider.clone());
+//
+//     // Create the store - this will automatically record the fingerprint metric
+//     let store_manager = Arc::new(StoreManager::new());
+//     {
+//         let store = {
+//             let mut builder = Builder::default_centralized();
+//             let mocks = Arc::new(MockRedisBackend::new());
+//             builder.set_config(RedisConfig {
+//                 mocks: Some(mocks),
+//                 ..Default::default()
+//             });
+//             let (client_pool, subscriber_client) = make_clients(builder);
+//
+//             // The RedisStore will automatically record the fingerprint_create_index metric
+//             let redis_store = RedisStore::new_from_builder_and_parts(
+//                 client_pool,
+//                 subscriber_client,
+//                 None,
+//                 mock_uuid_generator,
+//                 String::new(),
+//                 DEFAULT_READ_CHUNK_SIZE,
+//                 DEFAULT_MAX_CHUNK_UPLOADS_PER_UPDATE,
+//                 DEFAULT_SCAN_COUNT,
+//             )
+//             .unwrap();
+//
+//             Store::new(Arc::new(redis_store))
+//         };
+//         store_manager.add_store("redis_store", store);
+//     };
+//
+//     // Force flush metrics to ensure they're processed
+//     provider.force_flush().expect("Failed to flush metrics");
+//     let finished_metrics = exporter
+//         .get_finished_metrics()
+//         .expect("Failed to get finished metrics");
+//     assert!(!finished_metrics.is_empty(), "No metrics collected");
+//
+//     // Find our specific metric
+//     let fingerprint_datapoint = finished_metrics
+//         .iter()
+//         .flat_map(|rm| &rm.scope_metrics)
+//         .filter(|sm| sm.scope.name() == "redis_store_metrics")
+//         .flat_map(|sm| &sm.metrics)
+//         .filter(|m| m.name == "fingerprint_create_index")
+//         .filter_map(|m| m.data.as_any().downcast_ref::<Sum<u64>>())
+//         .flat_map(|sum| &sum.data_points)
+//         .find(|dp| {
+//             dp.attributes
+//                 .iter()
+//                 .any(|attr| attr.key.as_str() == "store" && attr.value.as_str() == "redis_store")
+//         });
+//
+//     // Assert we found the metric and it has the correct value
+//     let datapoint = fingerprint_datapoint.expect("Fingerprint metric datapoint not found");
+//     let fingerprint_numeric = u64::from_str_radix(&expected_fingerprint_value, 16).unwrap();
+//     assert_eq!(
+//         datapoint.value, fingerprint_numeric,
+//         "Fingerprint numeric value mismatch"
+//     );
+//     assert_eq!(
+//         format!("{:x}", datapoint.value),
+//         expected_fingerprint_value,
+//         "Fingerprint hex representation mismatch"
+//     );
+//
+//     provider
+//         .shutdown()
+//         .expect("Failed to shut down meter provider");
+//
+//     Ok(())
+// }
+
 #[nativelink_test]
 async fn test_redis_fingerprint_metric() -> Result<(), Error> {
     let expected_fingerprint_value: String = String::from("3e762c15");
 
-    let store_manager = Arc::new(StoreManager::new());
+    // Set up metrics collection
+    let exporter = InMemoryMetricExporter::default();
+    let provider = SdkMeterProvider::builder()
+        .with_reader(PeriodicReader::builder(exporter.clone()).build())
+        .with_resource(
+            Resource::builder()
+                .with_service_name("test_service")
+                .build(),
+        )
+        .build();
+    opentelemetry::global::set_meter_provider(provider.clone());
 
+    // Create the store - this will automatically record the fingerprint metric
     {
-        let store = {
-            let mut builder = Builder::default_centralized();
-            let mocks = Arc::new(MockRedisBackend::new());
-            builder.set_config(RedisConfig {
-                mocks: Some(mocks),
-                ..Default::default()
-            });
+        let mut builder = Builder::default_centralized();
+        let mocks = Arc::new(MockRedisBackend::new());
+        builder.set_config(RedisConfig {
+            mocks: Some(mocks),
+            ..Default::default()
+        });
+        let (client_pool, subscriber_client) = make_clients(builder);
 
-            let (client_pool, subscriber_client) = make_clients(builder);
-            Store::new(Arc::new(
-                RedisStore::new_from_builder_and_parts(
-                    client_pool,
-                    subscriber_client,
-                    None,
-                    mock_uuid_generator,
-                    String::new(),
-                    DEFAULT_READ_CHUNK_SIZE,
-                    DEFAULT_MAX_CHUNK_UPLOADS_PER_UPDATE,
-                    DEFAULT_SCAN_COUNT,
-                )
-                .unwrap(),
-            ))
-        };
-
-        store_manager.add_store("redis_store", store);
+        // Just creating the RedisStore will record the metric
+        RedisStore::new_from_builder_and_parts(
+            client_pool,
+            subscriber_client,
+            None,
+            mock_uuid_generator,
+            String::new(),
+            DEFAULT_READ_CHUNK_SIZE,
+            DEFAULT_MAX_CHUNK_UPLOADS_PER_UPDATE,
+            DEFAULT_SCAN_COUNT,
+        )
+        .unwrap();
     };
 
-    let root_metrics = Arc::new(RwLock::new(RootMetricsTest {
-        stores: store_manager,
-    }));
+    // Force flush metrics to ensure they're processed
+    provider.force_flush().expect("Failed to flush metrics");
+    let finished_metrics = exporter
+        .get_finished_metrics()
+        .expect("Failed to get finished metrics");
 
-    let (layer, output_metrics) = MetricsCollectorLayer::new();
+    // Print all metrics for debugging
+    println!("All collected metrics:");
+    for rm in &finished_metrics {
+        for sm in &rm.scope_metrics {
+            println!("Scope: {}", sm.scope.name());
+            for m in &sm.metrics {
+                println!("  Metric: {}", m.name);
+                if let Some(sum) = m.data.as_any().downcast_ref::<Sum<u64>>() {
+                    for dp in &sum.data_points {
+                        println!("    Value: {:?}, Attributes: {:?}", dp.value, dp.attributes);
+                    }
+                }
+            }
+        }
+    }
 
-    tracing::subscriber::with_default(tracing_subscriber::registry().with(layer), || {
-        let metrics_component = root_metrics.read();
-        MetricsComponent::publish(
-            &*metrics_component,
-            MetricKind::Component,
-            MetricFieldData::default(),
-        )
-    })
-    .unwrap();
+    assert!(!finished_metrics.is_empty(), "No metrics collected");
 
-    let output_json_data = to_string(&*output_metrics.lock()).unwrap();
+    // Find our specific metric
+    let fingerprint_datapoint = finished_metrics
+        .iter()
+        .flat_map(|rm| &rm.scope_metrics)
+        .filter(|sm| sm.scope.name() == "redis_store_metrics")
+        .flat_map(|sm| &sm.metrics)
+        .filter(|m| m.name == "fingerprint_create_index")
+        .filter_map(|m| m.data.as_any().downcast_ref::<Sum<u64>>())
+        .flat_map(|sum| &sum.data_points)
+        .find(|dp| {
+            dp.attributes
+                .iter()
+                .any(|attr| attr.key.as_str() == "store" && attr.value.as_str() == "redis_store")
+        });
 
-    let parsed_output: Value = from_str(&output_json_data).unwrap();
+    // Assert we found the metric and it has the correct value
+    let datapoint = fingerprint_datapoint.expect("Fingerprint metric datapoint not found");
+    let fingerprint_numeric = u64::from_str_radix(&expected_fingerprint_value, 16).unwrap();
+    assert_eq!(
+        datapoint.value, fingerprint_numeric,
+        "Fingerprint numeric value mismatch"
+    );
+    assert_eq!(
+        format!("{:x}", datapoint.value),
+        expected_fingerprint_value,
+        "Fingerprint hex representation mismatch"
+    );
 
-    let fingerprint_create_index =
-        parsed_output["stores"]["redis_store"]["fingerprint_create_index"]
-            .as_str()
-            .expect("fingerprint_create_index should be a hex string");
-
-    assert_eq!(fingerprint_create_index, expected_fingerprint_value);
+    provider
+        .shutdown()
+        .expect("Failed to shut down meter provider");
 
     Ok(())
 }
-
-#[derive(MetricsComponent)]
-struct RootMetricsTest {
-    #[metric(group = "stores")]
-    stores: Arc<dyn RootMetricsComponent>,
-}
-
-impl RootMetricsComponent for RootMetricsTest {}

@@ -118,7 +118,6 @@ rust_test_suite(
         "//nativelink-config",
         "//nativelink-error",
         "//nativelink-metric",
-        "//nativelink-metric-collector",
         "//nativelink-proto",
         "//nativelink-util",
         "@crates//:async-lock",
@@ -137,6 +136,7 @@ rust_test_suite(
         "@crates//:memory-stats",
         "@crates//:mock_instant",
         "@crates//:opentelemetry",
+        "@crates//:opentelemetry_sdk",
         "@crates//:parking_lot",
         "@crates//:pretty_assertions",
         "@crates//:rand",
@@ -159,7 +159,6 @@ rust_test(
         "//nativelink-macro",
     ],
     deps = [
-        "//nativelink-metric-collector",
         "@crates//:aws-sdk-s3",
         "@crates//:aws-smithy-runtime",
         "@crates//:aws-smithy-runtime-api",

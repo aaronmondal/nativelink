@@ -2203,7 +2203,6 @@ dependencies = [
  "nativelink-config",
  "nativelink-error",
  "nativelink-metric",
- "nativelink-metric-collector",
  "nativelink-scheduler",
  "nativelink-service",
  "nativelink-store",
@@ -2269,21 +2268,6 @@ dependencies = [
  "parking_lot",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "nativelink-metric-collector"
-version = "0.6.0"
-dependencies = [
- "nativelink-error",
- "nativelink-metric",
- "opentelemetry",
- "opentelemetry_sdk",
- "parking_lot",
- "serde",
- "serde_json",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -2414,10 +2398,10 @@ dependencies = [
  "nativelink-error",
  "nativelink-macro",
  "nativelink-metric",
- "nativelink-metric-collector",
  "nativelink-proto",
  "nativelink-util",
  "opentelemetry",
+ "opentelemetry_sdk",
  "parking_lot",
  "patricia_tree",
  "pretty_assertions",
@@ -2697,6 +2681,8 @@ dependencies = [
  "rand 0.9.1",
  "serde_json",
  "thiserror 2.0.12",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

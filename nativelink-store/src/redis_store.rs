@@ -54,6 +54,7 @@ use patricia_tree::StringPatriciaMap;
 use tokio::select;
 use tokio::time::sleep;
 use tracing::{error, warn};
+use opentelemetry::{InstrumentationScope, KeyValue, global, metrics};
 use uuid::Uuid;
 
 use crate::cas_utils::is_zero_digest;
@@ -102,6 +103,28 @@ fn to_hex(value: &u32) -> String {
     format!("{value:08x}")
 }
 
+#[derive(Debug)]
+struct RedisMetrics {
+    fingerprint_create_index: metrics::Counter<u64>,
+}
+
+impl RedisMetrics {
+    fn new(store_name: &str) -> Self {
+        let meter = global::meter_with_scope(
+            InstrumentationScope::builder("redis_store_metrics")
+                .with_attributes([KeyValue::new("store", store_name.to_string())])
+                .build(),
+        );
+
+        Self {
+            fingerprint_create_index: meter
+                .u64_counter("fingerprint_create_index")
+                .with_description("Tracks Redis fingerprint creation index")
+                .build(),
+        }
+    }
+}
+
 /// A [`StoreDriver`] implementation that uses Redis as a backing store.
 #[derive(Debug, MetricsComponent)]
 pub struct RedisStore {
@@ -118,12 +141,12 @@ pub struct RedisStore {
     /// TODO: This should be moved into the store in followups once a standard use pattern has been determined.
     subscriber_client: SubscriberClient,
 
-    /// For metrics only.
-    #[metric(
-        help = "A unique identifier for the FT.CREATE command used to create the index template",
-        handler = to_hex
-    )]
-    fingerprint_create_index: u32,
+    // /// For metrics only.
+    // #[metric(
+    //     help = "A unique identifier for the FT.CREATE command used to create the index template",
+    //     handler = to_hex
+    // )]
+    // fingerprint_create_index: u32,
 
     /// A function used to generate names for temporary keys.
     temp_name_generator_fn: fn() -> String,
@@ -155,6 +178,9 @@ pub struct RedisStore {
 
     /// A manager for subscriptions to keys in Redis.
     subscription_manager: Mutex<Option<Arc<RedisSubscriptionManager>>>,
+
+    /// Metrics
+    metrics: RedisMetrics,
 }
 
 impl RedisStore {
@@ -292,11 +318,17 @@ impl RedisStore {
         client_pool.connect();
         subscriber_client.connect();
 
+        let fingerprint_create_index = fingerprint_create_index_template();
+        let metrics = RedisMetrics::new("redis_store");
+        metrics.fingerprint_create_index.add(
+            u64::from(fingerprint_create_index),
+            &[KeyValue::new("store", "redis_store")],
+        );
+
         Ok(Self {
             client_pool,
             pub_sub_channel,
             subscriber_client,
-            fingerprint_create_index: fingerprint_create_index_template(),
             temp_name_generator_fn,
             key_prefix,
             read_chunk_size,
@@ -304,6 +336,7 @@ impl RedisStore {
             scan_count,
             update_if_version_matches_script: Script::from_lua(LUA_VERSION_SET_SCRIPT),
             subscription_manager: Mutex::new(None),
+            metrics,
         })
     }
 
