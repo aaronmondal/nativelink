@@ -14,7 +14,7 @@
 
 use core::pin::Pin;
 use core::{iter, mem};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use async_trait::async_trait;
 use futures::stream::{FuturesUnordered, StreamExt};
@@ -27,11 +27,11 @@ use nativelink_proto::build::bazel::remote::execution::v2::{
 use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::common::DigestInfo;
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
-use nativelink_util::metrics_utils::CounterWithTime;
 use nativelink_util::store_trait::{Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo};
+use opentelemetry::{InstrumentationScope, global, metrics};
 use parking_lot::Mutex;
 use tokio::sync::Notify;
-use tracing::warn;
+use tracing::{instrument, warn};
 
 use crate::ac_utils::{get_and_decode_digest, get_size_and_decode_digest};
 
@@ -105,15 +105,33 @@ async fn check_output_directories<'a>(
     Ok(())
 }
 
+static COMPLETENESS_METRICS: LazyLock<CompletenessMetrics> = LazyLock::new(|| {
+    let meter = global::meter_with_scope(
+        InstrumentationScope::builder("nativelink.store.completeness_checking").build(),
+    );
+
+    CompletenessMetrics {
+        incomplete_entries: meter
+            .u64_counter("nativelink.store.completeness_checking.incomplete_entries")
+            .with_description("Total number of incomplete entries hit in CompletenessCheckingStore")
+            .build(),
+        complete_entries: meter
+            .u64_counter("nativelink.store.completeness_checking.complete_entries")
+            .with_description("Total number of complete entries hit in CompletenessCheckingStore")
+            .build(),
+    }
+});
+
+#[derive(Debug)]
+struct CompletenessMetrics {
+    incomplete_entries: metrics::Counter<u64>,
+    complete_entries: metrics::Counter<u64>,
+}
+
 #[derive(Debug, MetricsComponent)]
 pub struct CompletenessCheckingStore {
     cas_store: Store,
     ac_store: Store,
-
-    #[metric(help = "Incomplete entries hit in CompletenessCheckingStore")]
-    incomplete_entries_counter: CounterWithTime,
-    #[metric(help = "Complete entries hit in CompletenessCheckingStore")]
-    complete_entries_counter: CounterWithTime,
 }
 
 impl CompletenessCheckingStore {
@@ -121,8 +139,6 @@ impl CompletenessCheckingStore {
         Arc::new(Self {
             cas_store,
             ac_store,
-            incomplete_entries_counter: CounterWithTime::default(),
-            complete_entries_counter: CounterWithTime::default(),
         })
     }
 
@@ -130,6 +146,10 @@ impl CompletenessCheckingStore {
     /// exist in the CAS. Does this by decoding digests and
     /// checking their existence in two separate sets of futures that
     /// are polled concurrently.
+    #[instrument(
+        skip(self, action_result_digests, results),
+        fields(digests_count = action_result_digests.len()),
+    )]
     async fn inner_has_with_results(
         &self,
         action_result_digests: &[StoreKey<'_>],
@@ -144,6 +164,9 @@ impl CompletenessCheckingStore {
             notify: Arc<Notify>,
             done: bool,
         }
+
+        let metrics = &*COMPLETENESS_METRICS;
+
         // Note: In theory Mutex is not needed, but lifetimes are
         // very tricky to get right here. Since we are using parking_lot
         // and we are guaranteed to never have lock collisions, it should
@@ -303,9 +326,9 @@ impl CompletenessCheckingStore {
                 }
                 maybe_result = futures.next() => {
                     match maybe_result {
-                        Some(Ok(())) => self.complete_entries_counter.inc(),
+                        Some(Ok(())) => { metrics.complete_entries.add(1, &[]); },
                         Some(Err((err, i))) => {
-                            self.incomplete_entries_counter.inc();
+                            metrics.incomplete_entries.add(1, &[]);
                             state_mux.lock().results[i] = None;
                             // Note: Don't return the errors. We just flag the result as
                             // missing but show a warning if it's not a NotFound.
@@ -327,6 +350,7 @@ impl CompletenessCheckingStore {
                             check_existence_fut
                                 .await
                                 .err_tip(|| "CompletenessCheckingStore's check_existence_fut ended unexpectedly on last await")?;
+
                             return Ok(());
                         }
                     }
@@ -339,6 +363,10 @@ impl CompletenessCheckingStore {
 
 #[async_trait]
 impl StoreDriver for CompletenessCheckingStore {
+    #[instrument(
+        skip(self, keys, results),
+        fields(keys_count = keys.len()),
+    )]
     async fn has_with_results(
         self: Pin<&Self>,
         keys: &[StoreKey<'_>],
@@ -347,6 +375,10 @@ impl StoreDriver for CompletenessCheckingStore {
         self.inner_has_with_results(keys, results).await
     }
 
+    #[instrument(
+        skip(self, reader, size_info),
+        fields(key = %key.as_str()),
+    )]
     async fn update(
         self: Pin<&Self>,
         key: StoreKey<'_>,
@@ -356,6 +388,10 @@ impl StoreDriver for CompletenessCheckingStore {
         self.ac_store.update(key, reader, size_info).await
     }
 
+    #[instrument(
+        skip(self, writer),
+        fields(key = %key.as_str(), offset = offset, length = ?length),
+    )]
     async fn get_part(
         self: Pin<&Self>,
         key: StoreKey<'_>,
