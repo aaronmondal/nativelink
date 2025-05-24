@@ -30,6 +30,7 @@ use nativelink_util::evicting_map::{EvictingMap, LenEntry};
 use nativelink_util::instant_wrapper::InstantWrapper;
 use nativelink_util::spawn;
 use nativelink_util::task::JoinHandleDropGuard;
+use opentelemetry::KeyValue;
 use tokio::sync::{Notify, mpsc, watch};
 use tracing::{debug, error};
 
@@ -838,7 +839,11 @@ impl<I: InstantWrapper, NowFn: Fn() -> I + Clone + Send + Sync + 'static>
     ) -> Self {
         let (action_event_tx, mut action_event_rx) = mpsc::unbounded_channel();
         let inner = Arc::new(Mutex::new(AwaitedActionDbImpl {
-            client_operation_to_awaited_action: EvictingMap::new(eviction_config, (now_fn)()),
+            client_operation_to_awaited_action: EvictingMap::new(
+                eviction_config,
+                (now_fn)(),
+                &[KeyValue::new("store_type", "memory_awaited_action_db")],
+            ),
             operation_id_to_awaited_action: BTreeMap::new(),
             action_info_hash_key_to_awaited_action: HashMap::new(),
             sorted_action_info_hash_keys: SortedAwaitedActions::default(),
