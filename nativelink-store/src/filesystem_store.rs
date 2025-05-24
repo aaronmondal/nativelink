@@ -33,11 +33,12 @@ use nativelink_util::buf_channel::{
     DropCloserReadHalf, DropCloserWriteHalf, make_buf_channel_pair,
 };
 use nativelink_util::common::{DigestInfo, fs};
-use nativelink_util::evicting_map::{EvictingMap, LenEntry};
+use nativelink_util::evicting_map::{EvictingMap, LenEntry, STORE};
 use nativelink_util::health_utils::{HealthRegistryBuilder, HealthStatus, HealthStatusIndicator};
 use nativelink_util::store_trait::{
     StoreDriver, StoreKey, StoreKeyBorrow, StoreOptimizations, UploadSizeInfo,
 };
+use opentelemetry::KeyValue;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, Take};
 use tokio_stream::wrappers::ReadDirStream;
 use tracing::{debug, error, warn};
@@ -639,7 +640,11 @@ impl<Fe: FileEntry> FilesystemStore<Fe> {
 
         let empty_policy = nativelink_config::stores::EvictionPolicy::default();
         let eviction_policy = spec.eviction_policy.as_ref().unwrap_or(&empty_policy);
-        let evicting_map = Arc::new(EvictingMap::new(eviction_policy, now));
+        let evicting_map = Arc::new(EvictingMap::new(
+            eviction_policy,
+            now,
+            &[KeyValue::new(STORE.clone(), "filesystem")],
+        ));
 
         // Create temp and content directories and the s and d subdirectories.
 

@@ -25,11 +25,12 @@ use nativelink_config::stores::MemorySpec;
 use nativelink_error::{Code, Error, ResultExt};
 use nativelink_metric::MetricsComponent;
 use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
-use nativelink_util::evicting_map::{EvictingMap, LenEntry};
+use nativelink_util::evicting_map::{EvictingMap, LenEntry, STORE};
 use nativelink_util::health_utils::{
     HealthRegistryBuilder, HealthStatusIndicator, default_health_status_indicator,
 };
 use nativelink_util::store_trait::{StoreDriver, StoreKey, StoreKeyBorrow, UploadSizeInfo};
+use opentelemetry::KeyValue;
 
 use crate::cas_utils::is_zero_digest;
 
@@ -65,7 +66,11 @@ impl MemoryStore {
         let empty_policy = nativelink_config::stores::EvictionPolicy::default();
         let eviction_policy = spec.eviction_policy.as_ref().unwrap_or(&empty_policy);
         Arc::new(Self {
-            evicting_map: EvictingMap::new(eviction_policy, SystemTime::now()),
+            evicting_map: EvictingMap::new(
+                eviction_policy,
+                SystemTime::now(),
+                &[KeyValue::new(STORE.clone(), "memory")],
+            ),
         })
     }
 
