@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use async_trait::async_trait;
 use nativelink_config::stores::VerifySpec;
@@ -25,24 +25,37 @@ use nativelink_util::buf_channel::{
 use nativelink_util::common::PackedHash;
 use nativelink_util::digest_hasher::{DigestHasher, DigestHasherFunc, default_digest_hasher_func};
 use nativelink_util::health_utils::{HealthStatusIndicator, default_health_status_indicator};
-use nativelink_util::metrics_utils::CounterWithTime;
 use nativelink_util::store_trait::{Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo};
 use opentelemetry::context::Context;
+use opentelemetry::{InstrumentationScope, global, metrics};
+
+#[derive(Debug)]
+struct VerifyMetrics {
+    size_verification_failures: metrics::Counter<u64>,
+    hash_verification_failures: metrics::Counter<u64>,
+}
+
+static VERIFY_METRICS: LazyLock<VerifyMetrics> = LazyLock::new(|| {
+    let meter =
+        global::meter_with_scope(InstrumentationScope::builder("nativelink.store.verify").build());
+
+    VerifyMetrics {
+        size_verification_failures: meter
+            .u64_counter("nativelink.store.verify.size_verification_failures")
+            .with_description("Number of size verification failures")
+            .build(),
+        hash_verification_failures: meter
+            .u64_counter("nativelink.store.verify.hash_verification_failures")
+            .with_description("Number of hash verification failures")
+            .build(),
+    }
+});
 
 #[derive(Debug, MetricsComponent)]
 pub struct VerifyStore {
-    #[metric(group = "inner_store")]
     inner_store: Store,
-    #[metric(help = "If the verification store is verifying the size of the data")]
     verify_size: bool,
-    #[metric(help = "If the verification store is verifying the hash of the data")]
     verify_hash: bool,
-
-    // Metrics.
-    #[metric(help = "Number of failures the verification store had due to size mismatches")]
-    size_verification_failures: CounterWithTime,
-    #[metric(help = "Number of failures the verification store had due to hash mismatches")]
-    hash_verification_failures: CounterWithTime,
 }
 
 impl VerifyStore {
@@ -51,8 +64,6 @@ impl VerifyStore {
             inner_store,
             verify_size: spec.verify_size,
             verify_hash: spec.verify_hash,
-            size_verification_failures: CounterWithTime::default(),
-            hash_verification_failures: CounterWithTime::default(),
         })
     }
 
@@ -64,6 +75,7 @@ impl VerifyStore {
         original_hash: &PackedHash,
         mut maybe_hasher: Option<&mut D>,
     ) -> Result<(), Error> {
+        let metrics = &*VERIFY_METRICS;
         let mut sum_size: u64 = 0;
         loop {
             let chunk = rx
@@ -76,7 +88,7 @@ impl VerifyStore {
             if let Some(expected_size) = maybe_expected_digest_size {
                 match sum_size.cmp(&expected_size) {
                     core::cmp::Ordering::Greater => {
-                        self.size_verification_failures.inc();
+                        metrics.size_verification_failures.add(1, &[]);
                         return Err(make_input_err!(
                             "Expected size {} but already received {} on insert",
                             expected_size,
@@ -89,7 +101,7 @@ impl VerifyStore {
                         // on next cycle.
                         if let Ok(eof_chunk) = rx.peek().await {
                             if !eof_chunk.is_empty() {
-                                self.size_verification_failures.inc();
+                                metrics.size_verification_failures.add(1, &[]);
                                 return Err(make_input_err!(
                                     "Expected EOF chunk when exact size was hit on insert in verify store - {}",
                                     expected_size,
@@ -105,7 +117,7 @@ impl VerifyStore {
             if chunk.is_empty() {
                 if let Some(expected_size) = maybe_expected_digest_size {
                     if sum_size != expected_size {
-                        self.size_verification_failures.inc();
+                        metrics.size_verification_failures.add(1, &[]);
                         return Err(make_input_err!(
                             "Expected size {} but got size {} on insert",
                             expected_size,
@@ -117,7 +129,7 @@ impl VerifyStore {
                     let digest = hasher.finalize_digest();
                     let hash_result = digest.packed_hash();
                     if original_hash != hash_result {
-                        self.hash_verification_failures.inc();
+                        metrics.hash_verification_failures.add(1, &[]);
                         return Err(make_input_err!(
                             "Hashes do not match, got: {original_hash} but digest hash was {hash_result}",
                         ));
@@ -158,6 +170,7 @@ impl StoreDriver for VerifyStore {
         reader: DropCloserReadHalf,
         size_info: UploadSizeInfo,
     ) -> Result<(), Error> {
+        let metrics = &*VERIFY_METRICS;
         let StoreKey::Digest(digest) = key else {
             return Err(make_input_err!(
                 "Only digests are supported in VerifyStore. Got {key:?}"
@@ -166,7 +179,7 @@ impl StoreDriver for VerifyStore {
         let digest_size = digest.size_bytes();
         if let UploadSizeInfo::ExactSize(expected_size) = size_info {
             if self.verify_size && expected_size != digest_size {
-                self.size_verification_failures.inc();
+                metrics.size_verification_failures.add(1, &[]);
                 return Err(make_input_err!(
                     "Expected size to match. Got {} but digest says {} on update",
                     expected_size,
