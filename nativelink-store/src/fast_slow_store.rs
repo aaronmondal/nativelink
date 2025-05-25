@@ -16,9 +16,8 @@ use core::borrow::BorrowMut;
 use core::cmp::{max, min};
 use core::ops::Range;
 use core::pin::Pin;
-use core::sync::atomic::{AtomicU64, Ordering};
 use std::ffi::OsString;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, LazyLock, Weak};
 
 use async_trait::async_trait;
 use futures::{FutureExt, join};
@@ -34,6 +33,50 @@ use nativelink_util::store_trait::{
     Store, StoreDriver, StoreKey, StoreLike, StoreOptimizations, UploadSizeInfo,
     slow_update_store_with_file,
 };
+use opentelemetry::{InstrumentationScope, global, metrics};
+
+#[derive(Debug)]
+struct FastSlowMetrics {
+    fast_store_hits: metrics::Counter<u64>,
+    slow_store_hits: metrics::Counter<u64>,
+    fast_store_uploaded_bytes: metrics::Counter<u64>,
+    slow_store_uploaded_bytes: metrics::Counter<u64>,
+    fast_store_downloaded_bytes: metrics::Counter<u64>,
+    slow_store_downloaded_bytes: metrics::Counter<u64>,
+}
+
+static FAST_SLOW_METRICS: LazyLock<FastSlowMetrics> = LazyLock::new(|| {
+    let meter = global::meter_with_scope(
+        InstrumentationScope::builder("nativelink.store.fast_slow").build(),
+    );
+
+    FastSlowMetrics {
+        fast_store_hits: meter
+            .u64_counter("nativelink.store.fast_slow.fast_store_hits")
+            .with_description("Number of cache hits on the fast store")
+            .build(),
+        slow_store_hits: meter
+            .u64_counter("nativelink.store.fast_slow.slow_store_hits")
+            .with_description("Number of cache hits on the slow store")
+            .build(),
+        fast_store_uploaded_bytes: meter
+            .u64_counter("nativelink.store.fast_slow.fast_store_uploaded_bytes")
+            .with_description("Number of bytes uploaded to the fast store")
+            .build(),
+        slow_store_uploaded_bytes: meter
+            .u64_counter("nativelink.store.fast_slow.slow_store_uploaded_bytes")
+            .with_description("Number of bytes uploaded to the slow store")
+            .build(),
+        fast_store_downloaded_bytes: meter
+            .u64_counter("nativelink.store.fast_slow.fast_store_downloaded_bytes")
+            .with_description("Number of bytes downloaded from the fast store")
+            .build(),
+        slow_store_downloaded_bytes: meter
+            .u64_counter("nativelink.store.fast_slow.slow_store_downloaded_bytes")
+            .with_description("Number of bytes downloaded from the slow store")
+            .build(),
+    }
+});
 
 // TODO(aaronmondal) This store needs to be evaluated for more efficient memory usage,
 // there are many copies happening internally.
@@ -44,13 +87,9 @@ use nativelink_util::store_trait::{
 // if data is in the buffer.
 #[derive(Debug, MetricsComponent)]
 pub struct FastSlowStore {
-    #[metric(group = "fast_store")]
     fast_store: Store,
-    #[metric(group = "slow_store")]
     slow_store: Store,
     weak_self: Weak<Self>,
-    #[metric]
-    metrics: FastSlowStoreMetrics,
 }
 
 impl FastSlowStore {
@@ -59,7 +98,6 @@ impl FastSlowStore {
             fast_store,
             slow_store,
             weak_self: weak_self.clone(),
-            metrics: FastSlowStoreMetrics::default(),
         })
     }
 
@@ -154,6 +192,8 @@ impl StoreDriver for FastSlowStore {
         mut reader: DropCloserReadHalf,
         size_info: UploadSizeInfo,
     ) -> Result<(), Error> {
+        let metrics = &*FAST_SLOW_METRICS;
+
         // If either one of our stores is a noop store, bypass the multiplexing
         // and just use the store that is not a noop store.
         let slow_store = self.slow_store.inner_store(Some(key.borrow()));
@@ -185,8 +225,19 @@ impl StoreDriver for FastSlowStore {
                     return Result::<(), Error>::Ok(());
                 }
 
+                let buffer_len = u64::try_from(buffer.len())
+                    .err_tip(|| "Could not convert buffer.len() to u64")?;
+
                 let (fast_result, slow_result) =
                     join!(fast_tx.send(buffer.clone()), slow_tx.send(buffer));
+
+                if fast_result.is_ok() {
+                    metrics.fast_store_uploaded_bytes.add(buffer_len, &[]);
+                }
+                if slow_result.is_ok() {
+                    metrics.slow_store_uploaded_bytes.add(buffer_len, &[]);
+                }
+
                 fast_result
                     .map_err(|e| {
                         make_err!(
@@ -288,18 +339,18 @@ impl StoreDriver for FastSlowStore {
         offset: u64,
         length: Option<u64>,
     ) -> Result<(), Error> {
+        let metrics = &*FAST_SLOW_METRICS;
+
         // TODO(aaronmondal) Investigate if we should maybe ignore errors here instead of
         // forwarding the up.
         if self.fast_store.has(key.borrow()).await?.is_some() {
-            self.metrics
-                .fast_store_hit_count
-                .fetch_add(1, Ordering::Acquire);
+            metrics.fast_store_hits.add(1, &[]);
             self.fast_store
                 .get_part(key, writer.borrow_mut(), offset, length)
                 .await?;
-            self.metrics
+            metrics
                 .fast_store_downloaded_bytes
-                .fetch_add(writer.get_bytes_written(), Ordering::Acquire);
+                .add(writer.get_bytes_written(), &[]);
             return Ok(());
         }
 
@@ -315,9 +366,7 @@ impl StoreDriver for FastSlowStore {
                     key.as_str()
                 )
             })?;
-        self.metrics
-            .slow_store_hit_count
-            .fetch_add(1, Ordering::Acquire);
+        metrics.slow_store_hits.add(1, &[]);
 
         let send_range = offset..length.map_or(u64::MAX, |length| length + offset);
         let mut bytes_received: u64 = 0;
@@ -340,9 +389,7 @@ impl StoreDriver for FastSlowStore {
                 }
                 let output_buf_len = u64::try_from(output_buf.len())
                     .err_tip(|| "Could not output_buf.len() to u64")?;
-                self.metrics
-                    .slow_store_downloaded_bytes
-                    .fetch_add(output_buf_len, Ordering::Acquire);
+                metrics.slow_store_downloaded_bytes.add(output_buf_len, &[]);
 
                 let writer_fut = Self::calculate_range(
                     &(bytes_received..bytes_received + output_buf_len),
@@ -393,18 +440,6 @@ impl StoreDriver for FastSlowStore {
     fn as_any_arc(self: Arc<Self>) -> Arc<dyn core::any::Any + Sync + Send + 'static> {
         self
     }
-}
-
-#[derive(Debug, Default, MetricsComponent)]
-struct FastSlowStoreMetrics {
-    #[metric(help = "Hit count for the fast store")]
-    fast_store_hit_count: AtomicU64,
-    #[metric(help = "Downloaded bytes from the fast store")]
-    fast_store_downloaded_bytes: AtomicU64,
-    #[metric(help = "Hit count for the slow store")]
-    slow_store_hit_count: AtomicU64,
-    #[metric(help = "Downloaded bytes from the slow store")]
-    slow_store_downloaded_bytes: AtomicU64,
 }
 
 default_health_status_indicator!(FastSlowStore);
