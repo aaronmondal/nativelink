@@ -19,17 +19,19 @@ use core::future::Future;
 use core::hash::Hash;
 use core::ops::RangeBounds;
 use std::collections::BTreeSet;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
+use std::time::Instant;
 
 use async_lock::Mutex;
 use lru::LruCache;
 use nativelink_config::stores::EvictionPolicy;
 use nativelink_metric::MetricsComponent;
-use opentelemetry::{InstrumentationScope, Key, KeyValue, global, metrics};
+use opentelemetry::KeyValue;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
 use crate::instant_wrapper::InstantWrapper;
+use crate::metrics::{CACHE_METRICS, CacheMetricAttrs};
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct SerializedLRU<K> {
@@ -85,84 +87,6 @@ impl<T: LenEntry + Send + Sync> LenEntry for Arc<T> {
     }
 }
 
-/// Key describing the kind of store that the EvictingMap is used in.
-///
-/// Use it to create the EvictingMap like so:
-///
-///
-/// ```rust
-/// EvictingMap::new(
-///     eviction_config,
-///     (now_fn)(),
-///     &[KeyValue::new(STORE.clone(), "label")],
-/// ),
-/// ```
-pub static STORE: Key = Key::from_static_str("store");
-
-static EVICTING_MAP_METRICS: LazyLock<EvictingMapMetrics> = LazyLock::new(|| {
-    let meter = global::meter_with_scope(
-        InstrumentationScope::builder("nativelink.common.evicting_map").build(),
-    );
-
-    EvictingMapMetrics {
-        evicted_bytes: meter
-            .u64_counter("nativelink.common.evicting_map.evicted_bytes")
-            .with_description("Number of bytes evicted from the store")
-            .build(),
-        evicted_items: meter
-            .u64_counter("nativelink.common.evicting_map.evicted_items")
-            .with_description("Number of items evicted from the store")
-            .build(),
-        replaced_bytes: meter
-            .u64_counter("nativelink.common.evicting_map.replaced_bytes")
-            .with_description("Number of bytes replaced in the store")
-            .build(),
-        replaced_items: meter
-            .u64_counter("nativelink.common.evicting_map.replaced_items")
-            .with_description("Number of items replaced in the store")
-            .build(),
-        inserted_bytes: meter
-            .u64_counter("nativelink.common.evicting_map.inserted_bytes")
-            .with_description("Number of bytes inserted into the store")
-            .build(),
-        inserted_items: meter
-            .u64_counter("nativelink.common.evicting_map.inserted_items")
-            .with_description("Number of items inserted into the store")
-            .build(),
-        read_bytes: meter
-            .u64_counter("nativelink.common.evicting_map.read_bytes")
-            .with_description("Number of bytes read from the store")
-            .build(),
-        sum_store_size: meter
-            .i64_up_down_counter("nativelink.common.evicting_map.sum_store_size")
-            .with_description("Total size of all items in the store")
-            .build(),
-        item_size_bytes: meter
-            .u64_histogram("nativelink.common.evicting_map.item_size_bytes")
-            .with_description("Distribution of item sizes")
-            .with_unit("By")
-            .build(),
-        cache_requests: meter
-            .u64_counter("nativelink.common.evicting_map.cache_requests")
-            .with_description("Total number of cache get requests")
-            .build(),
-    }
-});
-
-#[derive(Debug)]
-struct EvictingMapMetrics {
-    evicted_bytes: metrics::Counter<u64>,
-    evicted_items: metrics::Counter<u64>,
-    replaced_bytes: metrics::Counter<u64>,
-    replaced_items: metrics::Counter<u64>,
-    inserted_bytes: metrics::Counter<u64>,
-    inserted_items: metrics::Counter<u64>,
-    read_bytes: metrics::Counter<u64>,
-    sum_store_size: metrics::UpDownCounter<i64>,
-    item_size_bytes: metrics::Histogram<u64>,
-    cache_requests: metrics::Counter<u64>,
-}
-
 #[derive(Debug, MetricsComponent)]
 struct State<K: Ord + Hash + Eq + Clone + Debug + Send, T: LenEntry + Debug + Send> {
     lru: LruCache<K, EvictionItem<T>>,
@@ -175,56 +99,46 @@ impl<K: Ord + Hash + Eq + Clone + Debug + Send + Sync, T: LenEntry + Debug + Syn
     State<K, T>
 {
     /// Removes an item from the cache.
-    async fn remove<Q>(
-        &mut self,
-        key: &Q,
-        eviction_item: &EvictionItem<T>,
-        replaced: bool,
-        attributes: &[KeyValue],
-    ) where
+    async fn remove<Q>(&mut self, key: &Q, eviction_item: &EvictionItem<T>)
+    where
         K: Borrow<Q>,
         Q: Ord + Hash + Eq + Debug + Sync,
     {
-        let metrics = &*EVICTING_MAP_METRICS;
-
         if let Some(btree) = &mut self.btree {
             btree.remove(key.borrow());
         }
 
-        let item_size = eviction_item.data.len();
-        self.sum_store_size -= eviction_item.data.len();
-        metrics
-            .sum_store_size
-            .add(-(TryInto::<i64>::try_into(item_size).unwrap()), attributes);
-
-        if replaced {
-            metrics.replaced_items.add(1, attributes);
-            metrics.replaced_bytes.add(item_size, attributes);
-        } else {
-            metrics.evicted_items.add(1, attributes);
-            metrics.evicted_bytes.add(item_size, attributes);
-            metrics.item_size_bytes.record(item_size, attributes);
-        }
+        self.sum_store_size = self.sum_store_size.saturating_sub(eviction_item.data.len());
         // Note: See comment in `unref()` requiring global lock of insert/remove.
         eviction_item.data.unref().await;
     }
 
     /// Inserts a new item into the cache. If the key already exists, the old item is returned.
-    async fn put(
-        &mut self,
-        key: K,
-        eviction_item: EvictionItem<T>,
-        attributes: &[KeyValue],
-    ) -> Option<T> {
+    async fn put(&mut self, key: K, eviction_item: EvictionItem<T>) -> (Option<T>, u64) {
         // If we are maintaining a btree index, we need to update it.
         if let Some(btree) = &mut self.btree {
             btree.insert(key.clone());
         }
-        if let Some(old_item) = self.lru.put(key.clone(), eviction_item) {
-            self.remove(&key, &old_item, true, attributes).await;
-            return Some(old_item.data);
+
+        let new_item_size = eviction_item.data.len();
+
+        // Update value if it already exists.
+        if let Some(old_item) = self.lru.put(key, eviction_item) {
+            let old_item_size = old_item.data.len();
+            // Update sum_store_size with net difference
+            self.sum_store_size = self
+                .sum_store_size
+                .saturating_sub(old_item_size)
+                .saturating_add(new_item_size);
+
+            old_item.data.unref().await;
+
+            return (Some(old_item.data), old_item_size);
         }
-        None
+
+        // If the value didn't exist, it's a new insertion.
+        self.sum_store_size = self.sum_store_size.saturating_add(new_item_size);
+        (None, 0)
     }
 }
 
@@ -245,8 +159,10 @@ pub struct EvictingMap<
     max_seconds: i32,
     // Maximum number of items to keep in the store.
     max_count: u64,
+    /// Pre-allocated cache metric attributes.
+    metric_attrs: CacheMetricAttrs,
     /// Pre-allocated attributes for metrics.
-    metric_attributes: Vec<KeyValue>,
+    base_metric_attrs: Vec<KeyValue>,
 }
 
 impl<K, T, I> EvictingMap<K, T, I>
@@ -256,19 +172,16 @@ where
     I: InstantWrapper,
 {
     pub fn new(config: &EvictionPolicy, anchor_time: I, attributes: &[KeyValue]) -> Self {
-        let mut metric_attributes = vec![
-            // TODO(aaronmondal): This is out of place. The proper way to handle
-            //                    this seems to be removing the StoreManager and
-            //                    constructing the store layout by directly
-            //                    using the graph structure implied by the
-            //                    configuration.
-            //
-            //                    In the meantime, the allocation here is not
-            //                    the end of the world as it only happens once
-            //                    for each construction.
-            KeyValue::new("instance_name", "unknown"),
-        ];
-        metric_attributes.extend_from_slice(attributes);
+        // TODO(aaronmondal): This is out of place. The proper way to handle
+        //                    this seems to be removing the StoreManager and
+        //                    constructing the store layout by directly using
+        //                    the graph structure implied by the configuration.
+        //
+        //                    In the meantime, the allocation here is not the
+        //                    end of the world as it only happens once for each
+        //                    construction.
+        let mut base_metric_attrs = vec![KeyValue::new("instance_name", "unknown")];
+        base_metric_attrs.extend_from_slice(attributes);
 
         Self {
             // We use unbounded because if we use the bounded version we can't call the delete
@@ -283,7 +196,8 @@ where
             evict_bytes: config.evict_bytes as u64,
             max_seconds: config.max_seconds as i32,
             max_count: config.max_count,
-            metric_attributes,
+            metric_attrs: CacheMetricAttrs::new(&base_metric_attrs),
+            base_metric_attrs,
         }
     }
 
@@ -375,10 +289,28 @@ where
                 .lru
                 .pop_lru()
                 .expect("Tried to peek() then pop() but failed");
+
+            let item_size = eviction_item.data.len();
             debug!(?key, "Evicting",);
-            state
-                .remove(&key, &eviction_item, false, &self.metric_attributes)
-                .await;
+
+            let metrics = &*CACHE_METRICS;
+
+            state.remove(&key, &eviction_item).await;
+
+            // TODO(aaronmondal): Is it true that this cannot fail?
+            metrics
+                .cache_operations
+                .add(1, self.metric_attrs.evict_success());
+            metrics
+                .cache_io
+                .add(item_size, self.metric_attrs.evict_success());
+            metrics
+                .cache_size
+                .add(-(item_size as i64), &self.base_metric_attrs);
+            metrics.cache_entries.add(-1, &self.base_metric_attrs);
+            metrics
+                .cache_entry_size
+                .record(item_size, &self.base_metric_attrs);
 
             peek_entry = if let Some((_, entry)) = state.lru.peek_lru() {
                 entry
@@ -420,46 +352,75 @@ where
         R: Borrow<Q> + Send,
         Q: Ord + Hash + Eq + Debug + Sync,
     {
-        let metrics = &*EVICTING_MAP_METRICS;
+        let metrics = &*CACHE_METRICS;
         let mut state = self.state.lock().await;
 
         let lru_len = state.lru.len();
         for (key, result) in keys.into_iter().zip(results.iter_mut()) {
-            metrics.cache_requests.add(1, &self.metric_attributes);
+            let start_time = Instant::now();
 
             let maybe_entry = if peek {
                 state.lru.peek_mut(key.borrow())
             } else {
                 state.lru.get_mut(key.borrow())
             };
-            match maybe_entry {
-                Some(entry) => {
-                    // Note: We need to check eviction because the item might be expired
-                    // based on the current time. In such case, we remove the item while
-                    // we are here.
-                    if self.should_evict(lru_len, entry, 0, u64::MAX) {
-                        *result = None;
-                        if let Some((key, eviction_item)) = state.lru.pop_entry(key.borrow()) {
-                            info!(?key, "Item expired, evicting");
-                            state
-                                .remove(key.borrow(), &eviction_item, false, &self.metric_attributes)
-                                .await;
-                        }
-                    } else {
-                        if !peek {
-                            entry.seconds_since_anchor =
-                                self.anchor_time.elapsed().as_secs() as i32;
-                        }
-                        let data_len = entry.data.len();
-                        *result = Some(data_len);
 
-                        metrics.read_bytes.add(data_len, &self.metric_attributes);
+            if let Some(entry) = maybe_entry {
+                // Note: We need to check eviction because the item might be expired
+                // based on the current time. In such case, we remove the item while
+                // we are here.
+                if self.should_evict(lru_len, entry, 0, u64::MAX) {
+                    *result = None;
+                    if let Some((key, eviction_item)) = state.lru.pop_entry(key.borrow()) {
+                        info!(?key, "Item expired, evicting");
+                        let item_size = eviction_item.data.len();
+
+                        state.remove(key.borrow(), &eviction_item).await;
+
                         metrics
-                            .item_size_bytes
-                            .record(data_len, &self.metric_attributes);
+                            .cache_operations
+                            .add(1, self.metric_attrs.evict_expired());
+                        metrics
+                            .cache_io
+                            .add(item_size, self.metric_attrs.evict_expired());
+                        metrics.cache_operation_duration.record(
+                            start_time.elapsed().as_secs_f64() * 1000.0,
+                            self.metric_attrs.evict_expired(),
+                        );
+                        metrics
+                            .cache_size
+                            .add(-(item_size as i64), &self.base_metric_attrs);
+                        metrics.cache_entries.add(-1, &self.base_metric_attrs);
                     }
+                } else {
+                    if !peek {
+                        entry.seconds_since_anchor = self.anchor_time.elapsed().as_secs() as i32;
+                    }
+                    let data_len = entry.data.len();
+                    *result = Some(data_len);
+
+                    metrics
+                        .cache_operations
+                        .add(1, self.metric_attrs.read_hit());
+                    metrics.cache_io.add(data_len, self.metric_attrs.read_hit());
+                    metrics.cache_operation_duration.record(
+                        start_time.elapsed().as_secs_f64() * 1000.0,
+                        self.metric_attrs.read_hit(),
+                    );
+                    metrics
+                        .cache_entry_size
+                        .record(data_len, &self.base_metric_attrs);
                 }
-                None => *result = None,
+            } else {
+                *result = None;
+
+                metrics
+                    .cache_operations
+                    .add(1, self.metric_attrs.read_miss());
+                metrics.cache_operation_duration.record(
+                    start_time.elapsed().as_secs_f64() * 1000.0,
+                    self.metric_attrs.read_miss(),
+                );
             }
         }
     }
@@ -469,25 +430,42 @@ where
         K: Borrow<Q>,
         Q: Ord + Hash + Eq + Debug + Sync,
     {
-        let metrics = &*EVICTING_MAP_METRICS;
+        let start_time = Instant::now();
+        let metrics = &*CACHE_METRICS;
         let mut state = self.state.lock().await;
-        metrics.cache_requests.add(1, &self.metric_attributes);
 
         self.evict_items(&mut *state).await;
 
-        let entry = state.lru.get_mut(key.borrow())?;
+        let entry = state.lru.get_mut(key.borrow());
 
-        entry.seconds_since_anchor = self.anchor_time.elapsed().as_secs() as i32;
+        if let Some(entry) = entry {
+            entry.seconds_since_anchor = self.anchor_time.elapsed().as_secs() as i32;
+            let data = entry.data.clone();
+            let data_len = data.len();
 
-        let data = entry.data.clone();
-        let data_len = data.len();
+            metrics
+                .cache_operations
+                .add(1, self.metric_attrs.read_hit());
+            metrics.cache_io.add(data_len, self.metric_attrs.read_hit());
+            metrics.cache_operation_duration.record(
+                start_time.elapsed().as_secs_f64() * 1000.0,
+                self.metric_attrs.read_hit(),
+            );
+            metrics
+                .cache_entry_size
+                .record(data_len, &self.base_metric_attrs);
 
-        metrics.read_bytes.add(data_len, &self.metric_attributes);
-        metrics
-            .item_size_bytes
-            .record(data_len, &self.metric_attributes);
-
-        Some(data)
+            Some(data)
+        } else {
+            metrics
+                .cache_operations
+                .add(1, self.metric_attrs.read_miss());
+            metrics.cache_operation_duration.record(
+                start_time.elapsed().as_secs_f64() * 1000.0,
+                self.metric_attrs.read_miss(),
+            );
+            None
+        }
     }
 
     /// Returns the replaced item if any.
@@ -536,34 +514,54 @@ where
         // returned iterator should be Send as well.
         <It as IntoIterator>::IntoIter: Send,
     {
-        let metrics = &*EVICTING_MAP_METRICS;
-
+        let metrics = &*CACHE_METRICS;
         let mut replaced_items = Vec::new();
+
         for (key, data) in inserts {
+            let start_time = Instant::now();
             let new_item_size = data.len();
+
             let eviction_item = EvictionItem {
                 seconds_since_anchor,
                 data,
             };
 
-            if let Some(old_item) = state.put(key, eviction_item, &self.metric_attributes).await {
-                replaced_items.push(old_item);
-            }
-            state.sum_store_size += new_item_size;
+            let (old_item_data, old_item_size) = state.put(key, eviction_item).await;
 
             metrics
-                .sum_store_size
-                .add(new_item_size.try_into().unwrap(), &self.metric_attributes);
+                .cache_operations
+                .add(1, self.metric_attrs.write_success());
             metrics
-                .inserted_bytes
-                .add(new_item_size, &self.metric_attributes);
-            metrics.inserted_items.add(1, &self.metric_attributes);
-            metrics
-                .item_size_bytes
-                .record(new_item_size, &self.metric_attributes);
+                .cache_io
+                .add(new_item_size, self.metric_attrs.write_success());
+            metrics.cache_operation_duration.record(
+                start_time.elapsed().as_secs_f64() * 1000.0,
+                self.metric_attrs.write_success(),
+            );
+
+            if let Some(old_item) = old_item_data {
+                metrics.cache_size.add(
+                    new_item_size as i64 - old_item_size as i64,
+                    &self.base_metric_attrs,
+                );
+                metrics
+                    .cache_entry_size
+                    .record(new_item_size, &self.base_metric_attrs);
+
+                replaced_items.push(old_item);
+            } else {
+                metrics
+                    .cache_size
+                    .add(new_item_size as i64, &self.base_metric_attrs);
+                metrics.cache_entries.add(1, &self.base_metric_attrs);
+                metrics
+                    .cache_entry_size
+                    .record(new_item_size, &self.base_metric_attrs);
+            }
 
             self.evict_items(state).await;
         }
+
         replaced_items
     }
 
@@ -581,11 +579,42 @@ where
         K: Borrow<Q>,
         Q: Ord + Hash + Eq + Debug + Sync,
     {
+        let start_time = Instant::now();
+        let metrics = &*CACHE_METRICS;
+
         self.evict_items(state).await;
+
         if let Some(entry) = state.lru.pop(key.borrow()) {
-            state.remove(key, &entry, false, &self.metric_attributes).await;
+            let item_size = entry.data.len();
+
+            state.remove(key, &entry).await;
+
+            metrics
+                .cache_operations
+                .add(1, self.metric_attrs.delete_success());
+            metrics
+                .cache_io
+                .add(item_size, self.metric_attrs.delete_success());
+            metrics.cache_operation_duration.record(
+                start_time.elapsed().as_secs_f64() * 1000.0,
+                self.metric_attrs.delete_success(),
+            );
+            metrics
+                .cache_size
+                .add(-(item_size as i64), &self.base_metric_attrs);
+            metrics.cache_entries.add(-1, &self.base_metric_attrs);
+
             return true;
         }
+
+        metrics
+            .cache_operations
+            .add(1, self.metric_attrs.delete_miss());
+        metrics.cache_operation_duration.record(
+            start_time.elapsed().as_secs_f64() * 1000.0,
+            self.metric_attrs.delete_miss(),
+        );
+
         false
     }
 

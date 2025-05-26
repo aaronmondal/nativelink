@@ -23,9 +23,10 @@ use nativelink_error::{Error, ResultExt, error_if};
 use nativelink_metric::MetricsComponent;
 use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::common::DigestInfo;
-use nativelink_util::evicting_map::{EvictingMap, LenEntry, STORE};
+use nativelink_util::evicting_map::{EvictingMap, LenEntry};
 use nativelink_util::health_utils::{HealthStatus, HealthStatusIndicator};
 use nativelink_util::instant_wrapper::InstantWrapper;
+use nativelink_util::metrics::CACHE_TYPE;
 use nativelink_util::store_trait::{Store, StoreDriver, StoreKey, StoreLike, UploadSizeInfo};
 use opentelemetry::KeyValue;
 
@@ -70,7 +71,7 @@ impl<I: InstantWrapper> ExistenceCacheStore<I> {
             existence_cache: EvictingMap::new(
                 eviction_policy,
                 anchor_time,
-                &[KeyValue::new(STORE.clone(), "existence_cache")],
+                &[KeyValue::new(CACHE_TYPE, "existence_cache")],
             ),
         })
     }

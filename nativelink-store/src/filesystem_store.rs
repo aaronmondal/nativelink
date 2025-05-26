@@ -33,8 +33,9 @@ use nativelink_util::buf_channel::{
     DropCloserReadHalf, DropCloserWriteHalf, make_buf_channel_pair,
 };
 use nativelink_util::common::{DigestInfo, fs};
-use nativelink_util::evicting_map::{EvictingMap, LenEntry, STORE};
+use nativelink_util::evicting_map::{EvictingMap, LenEntry};
 use nativelink_util::health_utils::{HealthRegistryBuilder, HealthStatus, HealthStatusIndicator};
+use nativelink_util::metrics::CACHE_TYPE;
 use nativelink_util::store_trait::{
     StoreDriver, StoreKey, StoreKeyBorrow, StoreOptimizations, UploadSizeInfo,
 };
@@ -643,7 +644,7 @@ impl<Fe: FileEntry> FilesystemStore<Fe> {
         let evicting_map = Arc::new(EvictingMap::new(
             eviction_policy,
             now,
-            &[KeyValue::new(STORE.clone(), "filesystem")],
+            &[KeyValue::new(CACHE_TYPE, "filesystem")],
         ));
 
         // Create temp and content directories and the s and d subdirectories.
