@@ -21,7 +21,6 @@ use aws_smithy_runtime::client::http::test_util::{ReplayEvent, StaticReplayClien
 use aws_smithy_types::body::SdkBody;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::join;
-use futures::task::Poll;
 use http::header;
 use http::status::StatusCode;
 use http_body::Frame;
@@ -210,12 +209,9 @@ async fn simple_update_ac() -> Result<(), Error> {
 
     let (mock_client, request_receiver) =
         aws_smithy_runtime::client::http::test_util::capture_request(Some(
-            aws_smithy_runtime_api::http::Response::new(
-                StatusCode::OK.into(),
-                SdkBody::empty(), // This is an upload, so server does not send a body.
-            )
-            .try_into_http02x()
-            .unwrap(),
+            aws_smithy_runtime_api::http::Response::new(StatusCode::OK.into(), SdkBody::empty())
+                .try_into_http02x()
+                .unwrap(),
         ));
     let test_config = Builder::new()
         .behavior_version(BehaviorVersion::latest())
@@ -232,57 +228,43 @@ async fn simple_update_ac() -> Result<(), Error> {
         Arc::new(move |_delay| Duration::from_secs(0)),
         MockInstantWrapped::default,
     )?;
-    let (mut tx, rx) = make_buf_channel_pair();
-    // Make future responsible for processing the datastream
-    // and forwarding it to the s3 backend/server.
-    let mut update_fut = Box::pin(async move {
-        store
-            .update(
-                DigestInfo::try_new(VALID_HASH1, AC_ENTRY_SIZE)?,
-                rx,
-                UploadSizeInfo::ExactSize(CONTENT_LENGTH as u64),
-            )
-            .await
-    });
 
-    // Extract out the body stream sent by the s3 store.
-    let body_stream = {
-        // We need to poll here to get the request sent, but future
-        // wont be done until we send all the data (which we do later).
-        assert_eq!(Poll::Pending, futures::poll!(&mut update_fut));
-        let sent_request = request_receiver.expect_request();
-        assert_eq!(sent_request.method(), "PUT");
-        assert_eq!(
-            sent_request.uri(),
-            format!(
-                "https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{VALID_HASH1}-{AC_ENTRY_SIZE}?x-id=PutObject"
-            )
-        );
-        ByteStream::from_body_0_4(sent_request.into_body())
+    let (mut tx, rx) = make_buf_channel_pair();
+
+    // Send all data and EOF up front. The store will buffer the full body
+    // before dispatching the HTTP request, so the request isn't observable
+    // on the mock until after the stream is drained.
+    let send_data_copy = send_data.clone();
+    let send_fut = async move {
+        for i in 0..CONTENT_LENGTH {
+            tx.send(send_data_copy.slice(i..=i)).await?;
+        }
+        tx.send_eof()
     };
 
-    let send_data_copy = send_data.clone();
-    // Create spawn that is responsible for sending the stream of data
-    // to the S3Store and processing/forwarding to the S3 backend.
-    let spawn_fut = spawn!("simple_update_ac", async move {
-        tokio::try_join!(update_fut, async move {
-            for i in 0..CONTENT_LENGTH {
-                tx.send(send_data_copy.slice(i..=i)).await?;
-            }
-            tx.send_eof()
-        })
-        .or_else(
-            #[expect(clippy::use_debug)]
-            |e| {
-                // Printing error to make it easier to debug, since ordering
-                // of futures is not guaranteed.
-                eprintln!("Error updating or sending in spawn: {e:?}");
-                Err(e)
-            },
-        )
-    });
+    let update_fut = store.update(
+        DigestInfo::try_new(VALID_HASH1, AC_ENTRY_SIZE)?,
+        rx,
+        UploadSizeInfo::ExactSize(CONTENT_LENGTH as u64),
+    );
 
-    // Wait for all the data to be received by the s3 backend server.
+    // Run the producer and update concurrently. Update will drain the
+    // reader, then dispatch the PUT.
+    let (send_result, update_result) = tokio::join!(send_fut, update_fut);
+    send_result?;
+    update_result?;
+
+    // Now the request has been dispatched. Capture it and verify.
+    let sent_request = request_receiver.expect_request();
+    assert_eq!(sent_request.method(), "PUT");
+    assert_eq!(
+        sent_request.uri(),
+        format!(
+            "https://{BUCKET_NAME}.s3.{REGION}.amazonaws.com/{VALID_HASH1}-{AC_ENTRY_SIZE}?x-id=PutObject"
+        )
+    );
+
+    let body_stream = ByteStream::from_body_0_4(sent_request.into_body());
     let data_sent_to_s3 = body_stream
         .collect()
         .await
@@ -293,11 +275,6 @@ async fn simple_update_ac() -> Result<(), Error> {
 
     assert_eq!(send_data, actual_payload, "Expected data to match");
 
-    // Collect our spawn future to ensure it completes without error.
-    spawn_fut
-        .await
-        .err_tip(|| "Failed to launch spawn")?
-        .err_tip(|| "In spawn")?;
     Ok(())
 }
 

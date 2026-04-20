@@ -40,9 +40,7 @@ use nativelink_config::stores::ExperimentalAwsSpec;
 // ie: Don't import make_input_err!() to help prevent this.
 use nativelink_error::{Code, Error, ResultExt, make_err};
 use nativelink_metric::MetricsComponent;
-use nativelink_util::buf_channel::{
-    DropCloserReadHalf, DropCloserWriteHalf, make_buf_channel_pair,
-};
+use nativelink_util::buf_channel::{DropCloserReadHalf, DropCloserWriteHalf};
 use nativelink_util::health_utils::{HealthRegistryBuilder, HealthStatus, HealthStatusIndicator};
 use nativelink_util::instant_wrapper::InstantWrapper;
 use nativelink_util::retry::{Retrier, RetryResult};
@@ -52,10 +50,10 @@ use nativelink_util::store_trait::{
 use parking_lot::Mutex;
 use tokio::sync::mpsc;
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::info;
 
 use crate::cas_utils::is_zero_digest;
-use crate::common_s3_utils::{BodyWrapper, TlsClient};
+use crate::common_s3_utils::TlsClient;
 
 // S3 parts cannot be smaller than this number. See:
 // https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
@@ -292,64 +290,36 @@ where
             let UploadSizeInfo::ExactSize(sz) = upload_size else {
                 unreachable!("upload_size must be UploadSizeInfo::ExactSize here");
             };
-            reader.set_max_recent_data_size(
-                u64::try_from(self.max_retry_buffer_per_request)
-                    .err_tip(|| "Could not convert max_retry_buffer_per_request to u64")?,
-            );
+            // Buffer the full body before handing it to the AWS SDK. The SDK's
+            // single-chunk path with SigV4 chunked signing reads the body twice
+            // (once to compute the signature, once to send), so we can't avoid
+            // the allocation here.
+            let body_bytes = reader
+                .consume(None)
+                .await
+                .err_tip(|| "Failed to read body in S3Store::update single-chunk path")?;
             return self
                 .retrier
-                .retry(unfold(reader, move |mut reader| async move {
-                    // We need to make a new pair here because the aws sdk does not give us
-                    // back the body after we send it in order to retry.
-                    let (mut tx, rx) = make_buf_channel_pair();
-
-                    // Upload the data to the S3 backend.
-                    let result = {
-                        let reader_ref = &mut reader;
-                        let (upload_res, bind_res) = tokio::join!(
-                            self.s3_client
-                                .put_object()
-                                .bucket(&self.bucket)
-                                .key(s3_path.clone())
-                                .content_length(sz as i64)
-                                .body(ByteStream::from_body_1_x(BodyWrapper {
-                                    reader: rx,
-                                    size: sz,
-                                }))
-                                .send()
-                                .map_ok_or_else(|e| Err(Error::from_std_err(Code::Aborted, &e)), |_| Ok(())),
-                            // Stream all data from the reader channel to the writer channel.
-                            tx.bind_buffered(reader_ref)
+                .retry(unfold(body_bytes, move |body_bytes| async move {
+                    let retry_result = self
+                        .s3_client
+                        .put_object()
+                        .bucket(&self.bucket)
+                        .key(s3_path.clone())
+                        .content_length(sz as i64)
+                        .body(ByteStream::from(body_bytes.clone()))
+                        .send()
+                        .await
+                        .map_or_else(
+                            |e| {
+                                let err = Error::from_std_err(Code::Aborted, &e)
+                                    .append("Failed to upload file to s3 in single chunk");
+                                info!(?err, "Retryable S3 error");
+                                RetryResult::Retry(err)
+                            },
+                            |_| RetryResult::Ok(()),
                         );
-                        upload_res
-                            .merge(bind_res)
-                            .err_tip(|| "Failed to upload file to s3 in single chunk")
-                    };
-
-                    // If we failed to upload the file, check to see if we can retry.
-                    let retry_result = result.map_or_else(|mut err| {
-                        // Ensure our code is Code::Aborted, so the client can retry if possible.
-                        err.code = Code::Aborted;
-                        let bytes_received = reader.get_bytes_received();
-                        if let Err(try_reset_err) = reader.try_reset_stream() {
-                            error!(
-                                ?bytes_received,
-                                err = ?try_reset_err,
-                                "Unable to reset stream after failed upload in S3Store::update"
-                            );
-                            return RetryResult::Err(err
-                                .merge(try_reset_err)
-                                .append(format!("Failed to retry upload with {bytes_received} bytes received in S3Store::update")));
-                        }
-                        let err = err.append(format!("Retry on upload happened with {bytes_received} bytes received in S3Store::update"));
-                        info!(
-                            ?err,
-                            ?bytes_received,
-                            "Retryable S3 error"
-                        );
-                        RetryResult::Retry(err)
-                    }, |()| RetryResult::Ok(()));
-                    Some((retry_result, reader))
+                    Some((retry_result, body_bytes))
                 }))
                 .await;
         }
