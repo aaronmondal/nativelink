@@ -966,6 +966,14 @@ pub struct ExperimentalAwsSpec {
     #[serde(default, deserialize_with = "convert_string_with_shellexpand")]
     pub bucket: String,
 
+    /// Force path-style S3 addressing (e.g. endpoint/bucket/key rather than
+    /// bucket.endpoint/key). Required when using a custom endpoint that
+    /// doesn't support virtual-hosted-style addressing, such as RustFS,
+    /// MinIO, or Ceph.
+    /// Default: false
+    #[serde(default)]
+    pub force_path_style: bool,
+
     /// Common retry and upload configuration
     #[serde(flatten)]
     pub common: CommonObjectSpec,

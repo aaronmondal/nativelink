@@ -128,7 +128,12 @@ where
                 .load()
                 .await;
 
-            Client::new(&config)
+            // Build S3-specific config so we can apply S3-only settings.
+            let s3_config = aws_sdk_s3::config::Builder::from(&config)
+                .force_path_style(spec.force_path_style)
+                .build();
+
+            Client::from_conf(s3_config)
         };
         Self::new_with_client_and_jitter(spec, s3_client, jitter_fn, now_fn)
     }
